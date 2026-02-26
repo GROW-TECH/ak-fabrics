@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
-import { HashRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Receipt, 
-  ShoppingCart, 
-  Users, 
-  Package, 
+import { HashRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
+import {
+  LayoutDashboard,
+  Receipt,
+  ShoppingCart,
+  Users,
+  Package,
   ChevronRight,
   Menu,
   RotateCcw,
@@ -38,7 +38,7 @@ import { INITIAL_ACCOUNTS, INITIAL_PRODUCTS, INITIAL_TRANSACTIONS, INITIAL_CATEG
 import Login from './pages/Login';
 const Sidebar = ({ isOpen, toggle }: { isOpen: boolean, toggle: () => void }) => {
   const location = useLocation();
-  
+
   const groups = [
     {
       title: 'General',
@@ -108,11 +108,10 @@ const Sidebar = ({ isOpen, toggle }: { isOpen: boolean, toggle: () => void }) =>
                     <Link
                       key={link.to}
                       to={link.to}
-                      className={`flex items-center px-4 py-2.5 rounded-xl transition-all duration-200 group ${
-                        isActive 
-                        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
+                      className={`flex items-center px-4 py-2.5 rounded-xl transition-all duration-200 group ${isActive
+                        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20'
                         : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                      }`}
+                        }`}
                       onClick={() => { if (window.innerWidth < 1024) toggle(); }}
                     >
                       <Icon className={`w-4 h-4 mr-3 ${isActive ? 'text-white' : 'group-hover:text-white transition-colors'}`} />
@@ -151,6 +150,16 @@ const Header = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
   );
 };
 
+const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
+  const token = localStorage.getItem("token");
+console.log("Checking auth token:", token);
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
+};
+
 const App: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>(INITIAL_ACCOUNTS);
@@ -160,327 +169,386 @@ const App: React.FC = () => {
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
 
 
-const API = import.meta.env.VITE_API_URL;
-console.log("API URL:", API);
+  const API = import.meta.env.VITE_API_URL;
+  console.log("API URL:", API);
   const getAuthHeaders = () => ({
-  "Content-Type": "application/json",
-  Authorization: `Bearer ${localStorage.getItem("token")}`
-});
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${localStorage.getItem("token")}`
+  });
   useEffect(() => {
     fetchCategories();
     fetchSubCategories();
     fetchProducts();
   }, []);
 
-const fetchCategories = async () => {
-  try {
-    const response = await fetch(`${API}/api/categories`, {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`
-      }
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      setCategories(data);
-    }
-  } catch (error) {
-    console.error("Failed to fetch categories:", error);
-  }
-};
-
-const fetchSubCategories = async () => {
-  try {
-    const response = await fetch(`${API}/api/subcategories`, {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`
-      }
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      setSubCategories(data);
-    }
-  } catch (error) {
-    console.error("Failed to fetch sub-categories:", error);
-  }
-};
-
-const fetchProducts = async () => {
-  try {
-    const response = await fetch(`${API}/api/products`, {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`
-      }
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      setProducts(data);
-    }
-  } catch (error) {
-    console.error("Failed to fetch products:", error);
-  }
-};
-
-  const addTransaction = (newTx: Transaction) => {
-    setTransactions(prev => [newTx, ...prev]);
-    
-    // Update Ledger Balances
-    setAccounts(prev => prev.map(acc => {
-      if (acc.id === newTx.accountId) {
-        let delta = newTx.amount;
-        // In simple terms: Sales/Receipts increase balance, Purchases/Payments decrease it
-        if (newTx.type === TransactionType.PURCHASE || newTx.type === TransactionType.PAYMENT || newTx.type === TransactionType.SALES_RETURN) {
-           delta = -newTx.amount;
+  const fetchCategories = async () => {
+    try {
+      const response = await fetch(`${API}/api/categories`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`
         }
-        return { ...acc, balance: acc.balance + delta };
-      }
-      return acc;
-    }));
+      });
 
-    // Update Inventory Stock
-    if (newTx.items) {
-      setProducts(prev => prev.map(p => {
-        const item = newTx.items?.find(i => i.productId === p.id);
-        if (item) {
-          let stockDelta = item.quantity;
-          if (newTx.type === TransactionType.SALE || newTx.type === TransactionType.PURCHASE_RETURN || newTx.type === TransactionType.STOCK_OUT) {
-             stockDelta = -item.quantity;
-          }
-          return { ...p, stock: p.stock + stockDelta };
-        }
-        return p;
-      }));
+      if (response.ok) {
+        const data = await response.json();
+        setCategories(data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch categories:", error);
     }
   };
+
+  const fetchSubCategories = async () => {
+    try {
+      const response = await fetch(`${API}/api/subcategories`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSubCategories(data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch sub-categories:", error);
+    }
+  };
+
+  const fetchProducts = async () => {
+      const token = localStorage.getItem("token");
+      console.log("Local storage Token",token);
+      
+
+    try {
+      const response = await fetch(`${API}/api/products`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setProducts(data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch products:", error);
+    }
+  };
+
+const addTransaction = async (newTx: Transaction) => {
+  setTransactions(prev => [newTx, ...prev]);
+
+  // 🔹 Call stock API for each item
+  if (newTx.items) {
+    for (const item of newTx.items) {
+      let stockType = "";
+
+      if (newTx.type === TransactionType.PURCHASE)
+        stockType = "PURCHASE";
+
+      if (newTx.type === TransactionType.PURCHASE_RETURN)
+        stockType = "RETURN";
+
+      if (!stockType) continue;
+
+      await fetch(`${API}/api/stock`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        },
+        body: JSON.stringify({
+          product_id: item.productId,
+          type: stockType,
+          quantity: item.quantity,
+          reference_id: newTx.id,
+          note: newTx.description
+        })
+      });
+    }
+
+    // 🔹 Refresh products from DB
+    await fetchProducts();
+  }
+};
 
   const addAccount = (acc: Account) => setAccounts(prev => [...prev, acc]);
 
 
-const addCategory = async (form: FormData) => {
-  try {
-    const response = await fetch(`${API}/api/categories`, {
+  const addCategory = async (form: FormData) => {
+    try {
+      const response = await fetch(`${API}/api/categories`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        },
+        body: form
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setCategories(prev => [...prev, data]);
+      }
+    } catch (error) {
+      console.error("Failed to add category:", error);
+    }
+  };
+  const updateCategory = async (id: string, form: FormData) => {
+    try {
+      const response = await fetch(`${API}/api/categories/${id}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        },
+        body: form
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setCategories(prev =>
+          prev.map(cat => (cat.id === data.id ? data : cat))
+        );
+      }
+    } catch (error) {
+      console.error("Failed to update category:", error);
+    }
+  };
+  const deleteCategory = async (id: string) => {
+    try {
+      const response = await fetch(`${API}/api/categories/${id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        }
+      });
+
+      if (response.ok) {
+        setCategories(prev => prev.filter(cat => cat.id !== id));
+      }
+    } catch (error) {
+      console.error("Failed to delete category:", error);
+    }
+  };
+  const addSubCategory = async (form: FormData) => {
+    try {
+      const response = await fetch(`${API}/api/subcategories`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+          // ❌ DO NOT SET Content-Type HERE
+        },
+        body: form
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        console.log("SERVER ERROR:", err);
+        alert(err.error || "Failed to create sub-category");
+        return;
+      }
+
+      const data = await response.json();
+      setSubCategories(prev => [...prev, data]);
+
+    } catch (error) {
+      console.error("Failed to add sub-category:", error);
+    }
+  };
+
+  const updateSubCategory = async (id: string, form: FormData) => {
+    try {
+      const response = await fetch(`${API}/api/subcategories/${id}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        },
+        body: form
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        alert(err.error || "Failed to update sub-category");
+        return;
+      }
+
+      const data = await response.json();
+      setSubCategories(prev =>
+        prev.map(sub => sub.id === data.id ? data : sub)
+      );
+
+    } catch (error) {
+      console.error("Failed to update sub-category:", error);
+    }
+  };
+
+  const deleteSubCategory = async (id: string) => {
+    try {
+      const response = await fetch(`${API}/api/subcategories/${id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        }
+      });
+
+      if (response.ok) {
+        setSubCategories(prev => prev.filter(sub => sub.id !== id));
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        alert(`Failed to delete sub-category: ${errorData.error || response.statusText}`);
+      }
+
+    } catch (error) {
+      console.error("Failed to delete sub-category:", error);
+      alert("Failed to delete sub-category. Check console for details.");
+    }
+  };
+  const addProduct = async (form: FormData) => {
+  const token = localStorage.getItem("token");
+
+    console.log("Sending token:", localStorage.getItem("token"));
+    const response = await fetch(`${API}/api/products`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`
-      },
+Authorization: `Bearer ${token}`      },
       body: form
     });
 
     if (response.ok) {
       const data = await response.json();
-      setCategories(prev => [...prev, data]);
+      setProducts(prev => [...prev, data]);
     }
-  } catch (error) {
-    console.error("Failed to add category:", error);
-  }
-};
-const updateCategory = async (id: string, form: FormData) => {
-  try {
-    const response = await fetch(`${API}/api/categories/${id}`, {
+  };
+
+  const updateProduct = async (id: string, form: FormData) => {
+      const token = localStorage.getItem("token");
+
+    const response = await fetch(`${API}/api/products/${id}`, {
       method: "PUT",
       headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`
+        Authorization: `Bearer ${token}`
       },
       body: form
     });
 
     if (response.ok) {
       const data = await response.json();
-      setCategories(prev =>
-        prev.map(cat => (cat.id === data.id ? data : cat))
+      setProducts(prev =>
+        prev.map(p => p.id === data.id ? data : p)
       );
     }
-  } catch (error) {
-    console.error("Failed to update category:", error);
-  }
-};
-const deleteCategory = async (id: string) => {
-  try {
-    const response = await fetch(`${API}/api/categories/${id}`, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`
+  };
+
+
+  const deleteProduct = async (id: string) => {
+    try {
+      const response = await fetch(`${API}/api/products/${id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        }
+      });
+
+      if (response.ok) {
+        setProducts(prev => prev.filter(p => p.id !== id));
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        alert(`Failed to delete product: ${errorData.error || response.statusText}`);
       }
-    });
 
-    if (response.ok) {
-      setCategories(prev => prev.filter(cat => cat.id !== id));
+    } catch (error) {
+      console.error("Failed to delete product:", error);
+      alert("Failed to delete product. Check console for details.");
     }
-  } catch (error) {
-    console.error("Failed to delete category:", error);
-  }
-};
-const addSubCategory = async (form: FormData) => {
-  try {
-    const response = await fetch(`${API}/api/subcategories`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`
-        // ❌ DO NOT SET Content-Type HERE
-      },
-      body: form
-    });
+  };
 
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      console.log("SERVER ERROR:", err);
-      alert(err.error || "Failed to create sub-category");
-      return;
-    }
-
-    const data = await response.json();
-    setSubCategories(prev => [...prev, data]);
-
-  } catch (error) {
-    console.error("Failed to add sub-category:", error);
-  }
-};
-
-const updateSubCategory = async (id: string, form: FormData) => {
-  try {
-    const response = await fetch(`${API}/api/subcategories/${id}`, {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`
-      },
-      body: form
-    });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      alert(err.error || "Failed to update sub-category");
-      return;
-    }
-
-    const data = await response.json();
-    setSubCategories(prev =>
-      prev.map(sub => sub.id === data.id ? data : sub)
-    );
-
-  } catch (error) {
-    console.error("Failed to update sub-category:", error);
-  }
-};
-
-const deleteSubCategory = async (id: string) => {
-  try {
-    const response = await fetch(`${API}/api/subcategories/${id}`, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`
-      }
-    });
-
-    if (response.ok) {
-      setSubCategories(prev => prev.filter(sub => sub.id !== id));
-    } else {
-      const errorData = await response.json().catch(() => ({}));
-      alert(`Failed to delete sub-category: ${errorData.error || response.statusText}`);
-    }
-
-  } catch (error) {
-    console.error("Failed to delete sub-category:", error);
-    alert("Failed to delete sub-category. Check console for details.");
-  }
-};
-const addProduct = async (form: FormData) => {
-  const response = await fetch(`${API}/api/products`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem("token")}`
-    },
-    body: form
-  });
-
-  if (response.ok) {
-    const data = await response.json();
-    setProducts(prev => [...prev, data]);
-  }
-};
-
-const updateProduct = async (id: string, form: FormData) => {
-  const response = await fetch(`${API}/api/products/${id}`, {
-    method: "PUT",
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem("token")}`
-    },
-    body: form
-  });
-
-  if (response.ok) {
-    const data = await response.json();
-    setProducts(prev =>
-      prev.map(p => p.id === data.id ? data : p)
-    );
-  }
-};
-
-
-const deleteProduct = async (id: string) => {
-  try {
-    const response = await fetch(`${API}/api/products/${id}`, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`
-      }
-    });
-
-    if (response.ok) {
-      setProducts(prev => prev.filter(p => p.id !== id));
-    } else {
-      const errorData = await response.json().catch(() => ({}));
-      alert(`Failed to delete product: ${errorData.error || response.statusText}`);
-    }
-
-  } catch (error) {
-    console.error("Failed to delete product:", error);
-    alert("Failed to delete product. Check console for details.");
-  }
-};
-const token = localStorage.getItem("token");
-
-if (!token) {
   return (
+
     <Router>
-      <Routes>
-        <Route path="*" element={<Login />} />
-      </Routes>
-    </Router>
-  );
-}
-  return (
-    
-    <Router>
-      
+
       <div className="flex h-screen bg-slate-50 overflow-hidden">
         <Sidebar isOpen={sidebarOpen} toggle={() => setSidebarOpen(!sidebarOpen)} />
         <div className="flex-1 flex flex-col overflow-hidden">
           <Header toggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
           <main className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth print:p-0">
             <Routes>
+
               <Route path="/login" element={<Login />} />
-              <Route path="/" element={<Dashboard transactions={transactions} accounts={accounts} />} />
-              <Route path="/sales" element={<Transactions typeFilter={TransactionType.SALE} transactions={transactions} accounts={accounts} products={products} onAdd={addTransaction} title="Sales Receipts" />} />
-              <Route path="/purchases" element={<Transactions typeFilter={TransactionType.PURCHASE} transactions={transactions} accounts={accounts} products={products} onAdd={addTransaction} title="Purchase Orders" />} />
-              <Route path="/payments" element={<Transactions typeFilter={TransactionType.PAYMENT} transactions={transactions} accounts={accounts} products={products} onAdd={addTransaction} title="Payments & Receipts" />} />
-              <Route path="/returns" element={<Transactions typeFilter="RETURNS" transactions={transactions} accounts={accounts} products={products} onAdd={addTransaction} title="Returns Management" />} />
-              
-              <Route path="/inventory" element={<Inventory products={products} onAddProduct={addProduct} categories={categories} transactions={transactions} />} />
-              <Route path="/products" element={<ProductMaster categories={categories} subCategories={subCategories} products={products} onAddProduct={addProduct} onUpdateProduct={updateProduct} onDeleteProduct={deleteProduct} />} />
-              <Route path="/categories" element={<CategoryMaster categories={categories} onAddCategory={addCategory} onUpdateCategory={updateCategory} onDeleteCategory={deleteCategory} />} />
-              <Route path="/sub-categories" element={<SubCategoryMaster categories={categories} subCategories={subCategories} onAddSubCategory={addSubCategory} onUpdateSubCategory={updateSubCategory} onDeleteSubCategory={deleteSubCategory} />} />
-              <Route path="/stock-in" element={<StockJournal type={TransactionType.STOCK_IN} products={products} onAdd={addTransaction} />} />
-              <Route path="/stock-out" element={<StockJournal type={TransactionType.STOCK_OUT} products={products} onAdd={addTransaction} />} />
+              <Route path="/" element={
+                <ProtectedRoute>
+                  <Dashboard transactions={transactions} accounts={accounts} />
+                </ProtectedRoute>
 
-              <Route path="/report-profit" element={<ProfitReport transactions={transactions} products={products} />} />
-              <Route path="/report-cash" element={<CashReport accounts={accounts} transactions={transactions} />} />
-              <Route path="/report-bank" element={<BankReport accounts={accounts} transactions={transactions} />} />
+              } />
+              <Route path="/sales" element={
+                <ProtectedRoute>
 
-              <Route path="/customers" element={<LedgerList filterType={AccountType.CUSTOMER} accounts={accounts} transactions={transactions} onAddAccount={addAccount} />} />
-              <Route path="/vendors" element={<LedgerList filterType={AccountType.VENDOR} accounts={accounts} transactions={transactions} onAddAccount={addAccount} />} />
-              <Route path="/ledgers/:id" element={<LedgerDetails accounts={accounts} transactions={transactions} />} />
+                  <Transactions typeFilter={TransactionType.SALE} transactions={transactions} accounts={accounts} products={products} onAdd={addTransaction} title="Sales Receipts" />
+                </ProtectedRoute>
+              } />
+              <Route path="/purchases" element={<ProtectedRoute>
+                <Transactions typeFilter={TransactionType.PURCHASE} transactions={transactions} accounts={accounts} products={products} onAdd={addTransaction} title="Purchase Orders" />
+              </ProtectedRoute>
+
+              } />
+              <Route path="/payments" element={<ProtectedRoute>
+                <Transactions typeFilter={TransactionType.PAYMENT} transactions={transactions} accounts={accounts} products={products} onAdd={addTransaction} title="Payments & Receipts" />     </ProtectedRoute>
+              } />
+              <Route path="/returns" element={<ProtectedRoute>
+                <Transactions typeFilter="RETURNS" transactions={transactions} accounts={accounts} products={products} onAdd={addTransaction} title="Returns Management" />    </ProtectedRoute>
+              } />
+
+              <Route path="/inventory" element={<ProtectedRoute>
+                <Inventory products={products} onAddProduct={addProduct} categories={categories} transactions={transactions} />    </ProtectedRoute>
+              } />
+              <Route path="/products" element={<ProtectedRoute>
+                <ProductMaster categories={categories} subCategories={subCategories} products={products} onAddProduct={addProduct} onUpdateProduct={updateProduct} onDeleteProduct={deleteProduct} />    </ProtectedRoute>
+              } />
+              <Route path="/categories" element={<ProtectedRoute>
+                <CategoryMaster categories={categories} onAddCategory={addCategory} onUpdateCategory={updateCategory} onDeleteCategory={deleteCategory} />    </ProtectedRoute>
+              } />
+              <Route path="/sub-categories" element={<ProtectedRoute>
+                <SubCategoryMaster categories={categories} subCategories={subCategories} onAddSubCategory={addSubCategory} onUpdateSubCategory={updateSubCategory} onDeleteSubCategory={deleteSubCategory} />    </ProtectedRoute>
+              } />
+              <Route path="/stock-in" element={
+  <ProtectedRoute>
+    <StockJournal 
+      type={TransactionType.STOCK_IN} 
+      products={products} 
+      refreshProducts={fetchProducts}
+    />
+  </ProtectedRoute>
+} />
+
+<Route path="/stock-out" element={
+  <ProtectedRoute>
+    <StockJournal 
+      type={TransactionType.STOCK_OUT} 
+      products={products} 
+      refreshProducts={fetchProducts}
+    />
+  </ProtectedRoute>
+} />
+
+              <Route path="/report-profit" element={<ProtectedRoute>
+                <ProfitReport transactions={transactions} products={products} />    </ProtectedRoute>
+              } />
+              <Route path="/report-cash" element={<ProtectedRoute>
+                <CashReport accounts={accounts} transactions={transactions} />    </ProtectedRoute>
+              } />
+              <Route path="/report-bank" element={<ProtectedRoute>
+                <BankReport accounts={accounts} transactions={transactions} />    </ProtectedRoute>
+              } />
+
+              <Route path="/customers" element={<ProtectedRoute>
+                <LedgerList filterType={AccountType.CUSTOMER} accounts={accounts} transactions={transactions} onAddAccount={addAccount} />    </ProtectedRoute>
+              } />
+              <Route path="/vendors" element={<ProtectedRoute>
+                <LedgerList filterType={AccountType.VENDOR} accounts={accounts} transactions={transactions} onAddAccount={addAccount} />    </ProtectedRoute>
+              } />
+              <Route path="/ledgers/:id" element={<ProtectedRoute>
+                <LedgerDetails accounts={accounts} transactions={transactions} />    </ProtectedRoute>
+              } />
             </Routes>
           </main>
         </div>

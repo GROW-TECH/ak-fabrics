@@ -5,12 +5,17 @@ import authRoutes from "./routes/auth";
 import categoryRoutes from "./routes/categories";
 import productRoutes from "./routes/products";
 import subCategoryRoutes from "./routes/subCategories";
+import stockRoutes from "./routes/stocks";
+
 import path from "path/win32";
 
 const app = express();
 
-app.use(cors());
-
+// app.use(cors());
+app.use(cors({
+  origin: "http://localhost:3000",
+  credentials: true
+}));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
 app.use(
@@ -21,6 +26,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/subcategories", subCategoryRoutes);
+app.use("/api/stock", stockRoutes);
 
 app.get("/", (req, res) => {
   res.send("AK Fabrics Backend Running 🚀");

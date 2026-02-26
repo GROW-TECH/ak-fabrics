@@ -13,6 +13,7 @@ export const authenticate = (
   next: NextFunction
 ) => {
   const authHeader = req.headers.authorization;
+  console.log("AUTH HEADER:", authHeader); // 👈 ADD THIS
 
   if (!authHeader) {
     return res.status(401).json({ error: "Access denied" });
@@ -24,7 +25,9 @@ export const authenticate = (
     const decoded = jwt.verify(token, JWT_SECRET);
     req.shop = decoded;
     next();
-  } catch {
-    return res.status(401).json({ error: "Invalid token" });
-  }
+  } catch (err: any) {
+  console.log("JWT VERIFY ERROR:", err.message);
+  return res.status(401).json({ error: err.message });
+}
+
 };

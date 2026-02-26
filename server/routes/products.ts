@@ -148,11 +148,13 @@ router.post("/", upload.array("images"), async (req: AuthRequest, res) => {
    UPDATE PRODUCT
 =========================== */
 
-router.put("/:id", upload.array("images"), async (req: AuthRequest, res) => {
-  try {
-    const { id } = req.params;
+router.post("/", upload.array("images"), async (req: AuthRequest, res) => {
+  const connection = await pool.getConnection();
+  await connection.beginTransaction();
 
+  try {
     const {
+      id,
       categoryId,
       subCategoryId,
       name,
@@ -166,43 +168,58 @@ router.put("/:id", upload.array("images"), async (req: AuthRequest, res) => {
       location
     } = req.body;
 
+    const qty = Number(stock) || 0;
+
     const files = req.files as Express.Multer.File[];
     const imageNames = files ? files.map(f => f.filename) : [];
 
-    await pool.query(
-      `UPDATE products
-       SET categoryId = ?, subCategoryId = ?, name = ?, description = ?,
-           price = ?, stock = ?, images = ?, isActive = ?,
-           designNo = ?, color = ?, quality = ?, location = ?
-       WHERE id = ? AND shop_id = ?`,
+    // 1️⃣ Insert Product
+    await connection.query(
+      `INSERT INTO products
+       (id, shop_id, categoryId, subCategoryId, name, description,
+        price, stock, images, isActive,
+        designNo, color, quality, location)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        id,
+        req.shop.shop_id,
         categoryId,
         subCategoryId,
         name,
-        description,
+        description || "",
         Number(price),
-        Number(stock),
+        qty,
         JSON.stringify(imageNames),
         isActive === "true" ? 1 : 0,
-        designNo,
-        color,
-        quality,
-        location,
-        id,
-        req.shop.shop_id
+        designNo || "",
+        color || "",
+        quality || "",
+        location || ""
       ]
     );
 
-    res.json({
+    // 2️⃣ Insert Initial Stock Transaction (if stock > 0)
+    if (qty > 0) {
+      await connection.query(
+        `INSERT INTO stock_transactions
+         (product_id, shop_id, type, quantity, note)
+         VALUES (?, ?, 'PURCHASE', ?, 'Initial Stock')`,
+        [id, req.shop.shop_id, qty]
+      );
+    }
+
+    await connection.commit();
+
+    res.status(201).json({
       id,
       categoryId,
       subCategoryId,
       name,
       description,
       price,
-      stock,
+      stock: qty,
       images: imageNames,
-      isActive,
+      isActive: isActive === "true",
       designNo,
       color,
       quality,
@@ -210,11 +227,14 @@ router.put("/:id", upload.array("images"), async (req: AuthRequest, res) => {
     });
 
   } catch (error: any) {
-    console.error("UPDATE PRODUCT ERROR:", error);
+    await connection.rollback();
+    console.error("CREATE PRODUCT ERROR:", error);
     res.status(500).json({
-      error: "Failed to update product",
+      error: "Failed to create product",
       details: error.message
     });
+  } finally {
+    connection.release();
   }
 });
 

@@ -24,7 +24,8 @@ const ProductMaster: React.FC<ProductMasterProps> = ({
   const [viewingImage, setViewingImage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+  const API = import.meta.env.VITE_API_URL;
+
   const [formData, setFormData] = useState({ 
     categoryId: '',
     subCategoryId: '',
@@ -159,7 +160,7 @@ const handleSubmit = (e: React.FormEvent) => {
   const renderImagePopup = (imageUrl: string) => {
     return (
       <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md p-4" onClick={() => setViewingImage(null)}>
-        <div className="relative max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="relative w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl shadow-2xl" onClick={e => e.stopPropagation()}>
           <button 
             onClick={() => setViewingImage(null)} 
             className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/40 rounded-full text-white transition-colors z-10"
@@ -401,13 +402,11 @@ const handleSubmit = (e: React.FormEvent) => {
           <div key={prod.id} className="bg-white rounded-3xl border border-slate-200 shadow-sm hover:shadow-xl transition-all group overflow-hidden flex flex-col">
             <div className="relative h-48 bg-slate-100 overflow-hidden">
               {prod.images && prod.images.length > 0 ? (
-                <img 
-                  src={prod.images[0]} 
-                  alt={prod.name} 
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
+<img 
+  src={`${API}/uploads/products/${prod.images[0]}`}
+  alt={prod.name}
+  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+/>              ) : (
                 <div className="w-full h-full flex items-center justify-center text-slate-300">
                   <Package className="w-12 h-12" />
                 </div>
@@ -415,8 +414,9 @@ const handleSubmit = (e: React.FormEvent) => {
               <div className="absolute top-4 right-4 flex gap-2">
                 {prod.images && prod.images.length > 0 && (
                   <button 
-                    onClick={() => setViewingImage(prod.images[0])}
-                    className="p-2 bg-white/90 backdrop-blur-sm rounded-xl text-slate-600 hover:text-emerald-600 shadow-sm transition-colors"
+onClick={() => setViewingImage(`${API}/uploads/products/${prod.images[0]}`)}
+
+className="p-2 bg-white/90 backdrop-blur-sm rounded-xl text-slate-600 hover:text-emerald-600 shadow-sm transition-colors"
                   >
                     <Eye className="w-4 h-4" />
                   </button>
