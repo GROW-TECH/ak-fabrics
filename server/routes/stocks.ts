@@ -5,13 +5,7 @@ import { authenticate, AuthRequest } from "../middleware/auth";
 const router = Router();
 router.use(authenticate);
 
-/* ===========================
-   CREATE STOCK TRANSACTION
-   TYPES:
-   - PURCHASE  ➜ + stock
-   - RETURN    ➜ - stock
-   - DEFECT    ➜ - stock
-=========================== */
+
 
 router.post("/", async (req: AuthRequest, res) => {
   try {

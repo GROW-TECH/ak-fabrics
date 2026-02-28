@@ -50,9 +50,7 @@ const upload = multer({ storage });
 router.get("/", async (req: AuthRequest, res) => {
   try {
     const [rows] = await pool.query(
-      `SELECT id, categoryId, subCategoryId, name, description,
-              price, stock, images, isActive,
-              designNo, color, quality, location, shop_id
+      `SELECT *
        FROM products
        WHERE shop_id = ?`,
       [req.shop.shop_id]
@@ -89,7 +87,8 @@ router.post("/", upload.array("images"), async (req: AuthRequest, res) => {
       designNo,
       color,
       quality,
-      location
+      location,
+      hsnCode
     } = req.body;
 
     const files = req.files as Express.Multer.File[];
@@ -99,8 +98,8 @@ router.post("/", upload.array("images"), async (req: AuthRequest, res) => {
       `INSERT INTO products
        (id, shop_id, categoryId, subCategoryId, name, description,
         price, stock, images, isActive,
-        designNo, color, quality, location)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        designNo, color, quality, location,hsnCode)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)`,
       [
         id,
         req.shop.shop_id,
@@ -115,7 +114,8 @@ router.post("/", upload.array("images"), async (req: AuthRequest, res) => {
         designNo || "",
         color || "",
         quality || "",
-        location || ""
+        location || "",
+        hsnCode||""
       ]
     );
 
@@ -132,7 +132,8 @@ router.post("/", upload.array("images"), async (req: AuthRequest, res) => {
       designNo,
       color,
       quality,
-      location
+      location,
+      hsnCode
     });
 
   } catch (error: any) {
@@ -165,7 +166,8 @@ router.post("/", upload.array("images"), async (req: AuthRequest, res) => {
       designNo,
       color,
       quality,
-      location
+      location,
+      hsnCode
     } = req.body;
 
     const qty = Number(stock) || 0;
@@ -178,8 +180,8 @@ router.post("/", upload.array("images"), async (req: AuthRequest, res) => {
       `INSERT INTO products
        (id, shop_id, categoryId, subCategoryId, name, description,
         price, stock, images, isActive,
-        designNo, color, quality, location)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        designNo, color, quality, location,hsnCode)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)`,
       [
         id,
         req.shop.shop_id,
@@ -194,7 +196,8 @@ router.post("/", upload.array("images"), async (req: AuthRequest, res) => {
         designNo || "",
         color || "",
         quality || "",
-        location || ""
+        location || "",
+        hsnCode || " "
       ]
     );
 
@@ -223,7 +226,8 @@ router.post("/", upload.array("images"), async (req: AuthRequest, res) => {
       designNo,
       color,
       quality,
-      location
+      location,
+      hsnCode
     });
 
   } catch (error: any) {

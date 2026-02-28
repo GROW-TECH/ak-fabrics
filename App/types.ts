@@ -36,6 +36,7 @@ export interface Product {
   color?: string;
   quality?: string;
   location?: string;
+  hsnCode?: string;
 }
 
 export interface Category {
@@ -66,6 +67,9 @@ export interface Account {
   address?: string;
   gstin?: string;
   state?: string;
+  pincode?: string;
+  through?: string;
+  throughGstin?: string;
 }
 
 export interface Transaction {

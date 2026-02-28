@@ -1,6 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Package, Plus, X, Search, FileEdit, Trash2, Image as ImageIcon, CheckCircle2, XCircle, Upload, ChevronDown, Layers, Eye } from 'lucide-react';
 import { Category, SubCategory, Product } from '../types';
+import * as XLSX from "xlsx";
+import { saveAs } from "file-saver";
+
+
 
 interface ProductMasterProps {
   categories: Category[];
@@ -38,7 +42,8 @@ const ProductMaster: React.FC<ProductMasterProps> = ({
     designNo: '',
     color: '',
     quality: '',
-    location: ''
+    location: '',
+      hsnCode: '' 
   });
 
   // Filter sub-categories based on selected category
@@ -66,7 +71,8 @@ const ProductMaster: React.FC<ProductMasterProps> = ({
         designNo: product.designNo || '',
         color: product.color || '',
         quality: product.quality || '',
-        location: product.location || ''
+        location: product.location || '',
+        hsnCode: product.hsnCode || ''
       });
     } else {
       setEditingProduct(null);
@@ -87,6 +93,38 @@ const ProductMaster: React.FC<ProductMasterProps> = ({
     }
     setIsModalOpen(true);
   };
+
+  const handleExcelDownload = () => {
+  const data = filteredProducts.map((prod) => ({
+    "Product ID": prod.id,
+    "Category": getCategoryName(prod.categoryId),
+    "Sub Category": getSubCategoryName(prod.subCategoryId),
+    "Product Name": prod.name,
+    "HSN Code": prod.hsnCode || "",
+    "Price": prod.price,
+    "Stock": prod.stock,
+    "Design No": prod.designNo || "",
+    "Color": prod.color || "",
+    "Quality": prod.quality || "",
+    "Location": prod.location || "",
+    "Status": prod.isActive ? "Active" : "Inactive",
+  }));
+
+  const worksheet = XLSX.utils.json_to_sheet(data);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Products");
+
+  const excelBuffer = XLSX.write(workbook, {
+    bookType: "xlsx",
+    type: "array",
+  });
+
+  const file = new Blob([excelBuffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+
+  saveAs(file, `Products_${new Date().toISOString()}.xlsx`);
+};
 
 const handleSubmit = (e: React.FormEvent) => {
   e.preventDefault();
@@ -110,6 +148,7 @@ const handleSubmit = (e: React.FormEvent) => {
   form.append("color", formData.color);
   form.append("quality", formData.quality);
   form.append("location", formData.location);
+  form.append("hsnCode", formData.hsnCode);
 
   if (fileInputRef.current?.files) {
     Array.from(fileInputRef.current.files).forEach(file => {
@@ -202,6 +241,12 @@ const handleSubmit = (e: React.FormEvent) => {
           >
             <Plus className="w-4 h-4 mr-2" /> New Product
           </button>
+          <button 
+  onClick={handleExcelDownload}
+  className="flex items-center px-4 py-2 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition-colors shadow-lg whitespace-nowrap"
+>
+  Download Excel
+</button>
         </div>
       </div>
 
@@ -263,6 +308,19 @@ const handleSubmit = (e: React.FormEvent) => {
                     placeholder="e.g. Premium Silk Satin" 
                   />
                 </div>
+
+                             <div className="space-y-1">
+  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+    HSN Code
+  </label>
+  <input 
+    value={formData.hsnCode} 
+    onChange={e => setFormData({...formData, hsnCode: e.target.value})} 
+    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none" 
+    placeholder="e.g. 5407" 
+  />
+</div>
+
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Price</label>
                   <input 
@@ -303,6 +361,7 @@ const handleSubmit = (e: React.FormEvent) => {
                     placeholder="e.g. Royal Blue" 
                   />
                 </div>
+   
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Quality</label>
                   <input 
@@ -457,6 +516,8 @@ className="p-2 bg-white/90 backdrop-blur-sm rounded-xl text-slate-600 hover:text
                 </div>
               )}
             </div>
+
+
             <div className="p-6 flex-1 flex flex-col">
               <div className="flex gap-2 mb-2">
                 <span className="text-[8px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg uppercase tracking-wider">
@@ -467,35 +528,54 @@ className="p-2 bg-white/90 backdrop-blur-sm rounded-xl text-slate-600 hover:text
                 </span>
               </div>
               <h3 className="text-lg font-black text-slate-800 mb-1">{prod.name}</h3>
+            
               <p className="text-xs text-slate-500 leading-relaxed flex-1 line-clamp-2">
                 {prod.description || 'No description provided.'}
               </p>
               
-              <div className="mt-4 grid grid-cols-2 gap-4">
-                <div className="bg-slate-50 p-2 rounded-xl">
-                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Price</p>
-                  <p className="text-sm font-black text-slate-800">₹{prod.price.toLocaleString()}</p>
-                </div>
-                <div className={`p-2 rounded-xl ${prod.stock < 10 ? 'bg-red-50' : 'bg-emerald-50'}`}>
-                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Stock</p>
-                  <p className={`text-sm font-black ${prod.stock < 10 ? 'text-red-600' : 'text-emerald-600'}`}>
-                    {prod.stock}
-                  </p>
-                </div>
-                {prod.quality && (
-                  <div className="bg-slate-50 p-2 rounded-xl">
-                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Quality</p>
-                    <p className="text-[10px] font-bold text-slate-700">{prod.quality}</p>
-                  </div>
-                )}
-                {prod.location && (
-                  <div className="bg-slate-50 p-2 rounded-xl">
-                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Location</p>
-                    <p className="text-[10px] font-bold text-slate-700">{prod.location}</p>
-                  </div>
-                )}
-              </div>
+          <div className="mt-4 grid grid-cols-2 gap-4">
 
+  <div className="bg-slate-50 p-2 rounded-xl">
+    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+      Price
+    </p>
+    <p className="text-sm font-black text-slate-800">
+      ₹{prod.price.toLocaleString()}
+    </p>
+  </div>
+
+  <div className={`p-2 rounded-xl ${prod.stock < 10 ? 'bg-red-50' : 'bg-emerald-50'}`}>
+    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+      Stock
+    </p>
+    <p className={`text-sm font-black ${prod.stock < 10 ? 'text-red-600' : 'text-emerald-600'}`}>
+      {prod.stock}
+    </p>
+  </div>
+
+  {prod.hsnCode && (
+    <div className="bg-slate-50 p-2 rounded-xl">
+      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+        HSN
+      </p>
+      <p className="text-[10px] font-bold text-slate-700">
+        {prod.hsnCode}
+      </p>
+    </div>
+  )}
+
+  {prod.quality && (
+    <div className="bg-slate-50 p-2 rounded-xl">
+      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+        Quality
+      </p>
+      <p className="text-[10px] font-bold text-slate-700">
+        {prod.quality}
+      </p>
+    </div>
+  )}
+
+</div>
               <div className="mt-4 pt-4 border-t border-slate-50 flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                 <span>ID: {prod.id}</span>
                 <button 

@@ -6,6 +6,9 @@ import categoryRoutes from "./routes/categories";
 import productRoutes from "./routes/products";
 import subCategoryRoutes from "./routes/subCategories";
 import stockRoutes from "./routes/stocks";
+import accountRoutes from "./routes/accounts";
+import purchaseRoutes from "./routes/purchase";
+import stockHistoryRouter from "./routes/stockHistory";
 
 import path from "path/win32";
 
@@ -27,6 +30,9 @@ app.use("/api/categories", categoryRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/subcategories", subCategoryRoutes);
 app.use("/api/stock", stockRoutes);
+app.use("/api/accounts", accountRoutes);
+app.use("/api/purchases", purchaseRoutes);
+app.use("/api/stock-history", stockHistoryRouter);
 
 app.get("/", (req, res) => {
   res.send("AK Fabrics Backend Running 🚀");

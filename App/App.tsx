@@ -35,6 +35,11 @@ import CashReport from './pages/CashReport';
 import BankReport from './pages/BankReport';
 import { Account, Product, Transaction, TransactionType, AccountType, Category, SubCategory } from './types';
 import { INITIAL_ACCOUNTS, INITIAL_PRODUCTS, INITIAL_TRANSACTIONS, INITIAL_CATEGORIES } from './constants';
+import PurchaseInvoicePage from "./components/PurchaseInvoiceModal";
+import StockReport from "./pages/StockReport";
+import StockHistory from "./pages/StockHistory";
+
+
 import Login from './pages/Login';
 const Sidebar = ({ isOpen, toggle }: { isOpen: boolean, toggle: () => void }) => {
   const location = useLocation();
@@ -62,8 +67,9 @@ const Sidebar = ({ isOpen, toggle }: { isOpen: boolean, toggle: () => void }) =>
         { to: '/products', label: 'Product Master', icon: Package },
         { to: '/categories', label: 'Categories Master', icon: Layers },
         { to: '/sub-categories', label: 'Sub-Categories Master', icon: Layers },
-        { to: '/stock-in', label: 'Stock In', icon: ArrowDownCircle },
-        { to: '/stock-out', label: 'Stock Out', icon: ArrowUpCircle },
+        // { to: '/stock-in', label: 'Stock In', icon: ArrowDownCircle },
+        // { to: '/stock-out', label: 'Stock Out', icon: ArrowUpCircle },
+        { to: '/stock-report', label: 'Stock Report', icon: BarChart3 },
       ]
     },
     {
@@ -162,8 +168,8 @@ console.log("Checking auth token:", token);
 
 const App: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [accounts, setAccounts] = useState<Account[]>(INITIAL_ACCOUNTS);
-  const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
+const [accounts, setAccounts] = useState<Account[]>([]); 
+ const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
   const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
   const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
@@ -179,7 +185,28 @@ const App: React.FC = () => {
     fetchCategories();
     fetchSubCategories();
     fetchProducts();
+      fetchAccounts();   // 🔥 ADD THIS
+
   }, []);
+
+
+  
+  const fetchAccounts = async () => {
+  try {
+    const response = await fetch(`${API}/api/accounts`, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`
+      }
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      setAccounts(data);   // 🔥 JUST THIS
+    }
+  } catch (error) {
+    console.error("Failed to fetch accounts:", error);
+  }
+};
 
   const fetchCategories = async () => {
     try {
@@ -273,8 +300,24 @@ const addTransaction = async (newTx: Transaction) => {
   }
 };
 
-  const addAccount = (acc: Account) => setAccounts(prev => [...prev, acc]);
+const addAccount = async (acc: Account) => {
+  try {
+    const response = await fetch(`${API}/api/accounts`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${localStorage.getItem("token")}`
+      },
+      body: JSON.stringify(acc)
+    });
 
+    if (response.ok) {
+      await fetchAccounts();  // 🔥 refresh from DB
+    }
+  } catch (error) {
+    console.error("Failed to add account:", error);
+  }
+};
 
   const addCategory = async (form: FormData) => {
     try {
@@ -486,6 +529,16 @@ Authorization: `Bearer ${token}`      },
                   <Transactions typeFilter={TransactionType.SALE} transactions={transactions} accounts={accounts} products={products} onAdd={addTransaction} title="Sales Receipts" />
                 </ProtectedRoute>
               } />
+
+
+              
+              <Route path="/stock-report" element={
+  <ProtectedRoute>
+    <StockReport />
+  </ProtectedRoute>
+} />
+
+
               <Route path="/purchases" element={<ProtectedRoute>
                 <Transactions typeFilter={TransactionType.PURCHASE} transactions={transactions} accounts={accounts} products={products} onAdd={addTransaction} title="Purchase Orders" />
               </ProtectedRoute>
@@ -510,6 +563,8 @@ Authorization: `Bearer ${token}`      },
               <Route path="/sub-categories" element={<ProtectedRoute>
                 <SubCategoryMaster categories={categories} subCategories={subCategories} onAddSubCategory={addSubCategory} onUpdateSubCategory={updateSubCategory} onDeleteSubCategory={deleteSubCategory} />    </ProtectedRoute>
               } />
+
+              <Route path="/purchase-invoice/:id" element={<PurchaseInvoicePage />} />
               <Route path="/stock-in" element={
   <ProtectedRoute>
     <StockJournal 
