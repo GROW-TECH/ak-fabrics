@@ -168,7 +168,7 @@ router.get("/sales/with-images", async (req: AuthRequest, res) => {
        ORDER BY s.created_at DESC`
     );
 
-    console.log('Found', rows.length, 'sales records with images');
+    console.log('Found', (rows as any[]).length, 'sales records with images');
 
     const data = (rows as any[]).map((row) => ({
       id: row.id,

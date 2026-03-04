@@ -20,10 +20,13 @@ import {
   Landmark,
   FilePieChart,
   ScanLine,
-  BookOpen
+  BookOpen,
+  LogOut,
 } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
 import Transactions from './pages/Transactions';
+import SalesReceipts from './pages/SalesReceipts';
+import PurchaseReceipts from './pages/PurchaseReceipts';
 import LedgerList from './pages/LedgerList';
 import LedgerDetails from './pages/LedgerDetails';
 import Inventory from './pages/Inventory';
@@ -36,19 +39,29 @@ import CashReport from './pages/CashReport';
 import BankReport from './pages/BankReport';
 import { Account, Product, Transaction, TransactionType, AccountType, Category, SubCategory } from './types';
 import { INITIAL_ACCOUNTS, INITIAL_PRODUCTS, INITIAL_TRANSACTIONS, INITIAL_CATEGORIES } from './constants';
-import PurchaseInvoicePage from "./components/PurchaseInvoiceModal";
+import SalesEditPage from './pages/SalesEditPage';
+import PurchaseEditPage from './pages/PurchaseEditPage';
+import PurchaseInvoicePage from "./pages/PurchaseInvoicePage";
 import BarcodeScanner from "./components/BarcodeScanner";
 import StockReport from "./pages/StockReport";
 import StockHistory from "./pages/StockHistory";
 import SalesInvoicePage from "./pages/Salesinvoicepage";
 import Catalogue from "./pages/Catalogue";
 
-// Add this route (after purchase-invoice route):
 import Login from './pages/Login';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Sidebar
+// ─────────────────────────────────────────────────────────────────────────────
 const Sidebar = ({ isOpen, toggle }: { isOpen: boolean, toggle: () => void }) => {
   const location = useLocation();
+  const { shopName, logout } = useAuth();
+
+  // Split shop name into two parts: first word as "logo letters", rest as name
+  const words = (shopName || 'AK Fabrics').trim().split(' ');
+  const initials = words.slice(0, 2).map((w: string) => w[0]).join('').toUpperCase();
+  const displayName = shopName || 'AK Fabrics';
 
   const groups = [
     {
@@ -60,57 +73,74 @@ const Sidebar = ({ isOpen, toggle }: { isOpen: boolean, toggle: () => void }) =>
     {
       title: 'Accounting',
       links: [
-        { to: '/sales', label: 'Sales ', icon: Receipt },
+        { to: '/sales', label: 'Sales', icon: Receipt },
+        { to: '/sales-receipts', label: 'Sales Receipts', icon: ArrowUpCircle },
         { to: '/purchases', label: 'Purchases', icon: ShoppingCart },
-        { to: '/payments', label: 'Payments', icon: CreditCard },
-        { to: '/returns', label: 'Returns', icon: RotateCcw },
+        { to: '/purchase-receipts', label: 'Purchase Receipts', icon: ArrowDownCircle },
       ]
     },
     {
       title: 'Inventory',
       links: [
-        { to: '/products', label: 'Product Master', icon: Package },
-        { to: '/categories', label: 'Categories Master', icon: Layers },
-        { to: '/sub-categories', label: 'Sub-Categories Master', icon: Layers },
+        { to: '/categories', label: 'Categories', icon: Layers },
+        { to: '/sub-categories', label: 'Sub-Categories', icon: Layers },
+        { to: '/products', label: 'Products', icon: Package },
         { to: '/catalogue', label: 'Catalogue', icon: BookOpen },
         { to: '/stock-report', label: 'Stock Report', icon: BarChart3 },
+        { to: '/returns', label: 'Returns', icon: BarChart3 },
       ]
     },
-    {
-      title: 'Reports',
-      links: [
-        { to: '/report-profit', label: 'Profit & Loss', icon: FilePieChart },
-        { to: '/report-cash', label: 'Cash in Hand', icon: Wallet },
-        { to: '/report-bank', label: 'Bank Reports', icon: Landmark },
-      ]
-    },
+   
     {
       title: 'Entities',
       links: [
         { to: '/customers', label: 'Customers', icon: Users },
         { to: '/vendors', label: 'Vendors', icon: Building2 },
       ]
-    }
+    },
+     {
+      title: 'Reports',
+      links: [
+        { to: '/report-profit', label: 'Profit & Loss', icon: FilePieChart },
+        // { to: '/report-cash', label: 'Cash in Hand', icon: Wallet },
+        // { to: '/report-bank', label: 'Bank Reports', icon: Landmark },
+      ]
+    },
   ];
 
   return (
     <>
-      <div className={`fixed inset-0 z-20 transition-opacity bg-black opacity-50 lg:hidden ${isOpen ? 'block' : 'hidden'}`} onClick={toggle}></div>
-      <div className={`fixed inset-y-0 left-0 z-30 w-64 overflow-y-auto transition duration-300 transform bg-slate-900 lg:translate-x-0 lg:static lg:inset-0 ${isOpen ? 'translate-x-0 ease-out' : '-translate-x-full ease-in'}`}>
-        <div className="flex items-center justify-center mt-8">
-          <div className="flex items-center space-x-2 px-6">
-            <div className="w-10 h-10 bg-indigo-500 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-xl">AK</span>
+      {/* Mobile overlay */}
+      <div
+        className={`fixed inset-0 z-20 transition-opacity bg-black/50 backdrop-blur-sm lg:hidden ${isOpen ? 'block' : 'hidden'}`}
+        onClick={toggle}
+      />
+
+      <div className={`fixed inset-y-0 left-0 z-30 w-64 flex flex-col transition-all duration-300 ease-in-out transform bg-slate-900 lg:translate-x-0 lg:static lg:inset-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'} shadow-2xl lg:shadow-lg`}>
+
+        {/* ── Shop identity block ── */}
+        <div className="px-4 py-5 border-b border-slate-700/50">
+          <div className="flex items-center gap-3">
+            {/* Avatar circle with initials */}
+            <div className="w-11 h-11 shrink-0 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-900/40">
+              <span className="text-white font-bold text-sm tracking-wide">{initials}</span>
             </div>
-            <span className="text-white text-xl font-bold tracking-tight">Fabrics</span>
+            {/* Shop name + tag */}
+            <div className="min-w-0">
+              <p className="text-white font-bold text-sm leading-tight truncate">{displayName}</p>
+              <p className="text-indigo-400 text-[10px] font-medium mt-0.5 tracking-wide uppercase">Business Account</p>
+            </div>
           </div>
         </div>
 
-        <nav className="mt-10 px-4 space-y-8 pb-10">
+        {/* ── Nav links ── */}
+        <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto">
           {groups.map((group, idx) => (
-            <div key={idx} className="space-y-2">
-              <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">{group.title}</p>
-              <div className="space-y-1">
+            <div key={idx}>
+              <h3 className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">
+                {group.title}
+              </h3>
+              <div className="space-y-0.5">
                 {group.links.map((link) => {
                   const Icon = link.icon;
                   const isActive = location.pathname === link.to;
@@ -118,15 +148,16 @@ const Sidebar = ({ isOpen, toggle }: { isOpen: boolean, toggle: () => void }) =>
                     <Link
                       key={link.to}
                       to={link.to}
-                      className={`flex items-center px-4 py-2.5 rounded-xl transition-all duration-200 group ${isActive
-                        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20'
-                        : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                        }`}
+                      className={`group flex items-center px-3 py-2.5 rounded-lg transition-all duration-150 text-sm font-medium ${
+                        isActive
+                          ? 'bg-gradient-to-r from-indigo-500 to-indigo-600 text-white shadow-md shadow-indigo-900/30'
+                          : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                      }`}
                       onClick={() => { if (window.innerWidth < 1024) toggle(); }}
                     >
-                      <Icon className={`w-4 h-4 mr-3 ${isActive ? 'text-white' : 'group-hover:text-white transition-colors'}`} />
-                      <span className="font-medium text-sm">{link.label}</span>
-                      {isActive && <ChevronRight className="ml-auto w-3 h-3" />}
+                      <Icon className={`w-4 h-4 mr-2.5 shrink-0 ${isActive ? 'text-white' : 'text-slate-500 group-hover:text-slate-300'}`} />
+                      <span className="truncate">{link.label}</span>
+                      {isActive && <ChevronRight className="ml-auto w-3.5 h-3.5 text-indigo-200" />}
                     </Link>
                   );
                 })}
@@ -134,98 +165,115 @@ const Sidebar = ({ isOpen, toggle }: { isOpen: boolean, toggle: () => void }) =>
             </div>
           ))}
         </nav>
+
+        {/* ── Logout at bottom ── */}
+        <div className="px-3 py-4 border-t border-slate-700/50">
+          <button
+            onClick={() => { logout(); window.location.href = '/login'; }}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-all duration-150 text-sm font-medium"
+          >
+            <LogOut className="w-4 h-4 shrink-0" />
+            <span>Logout</span>
+          </button>
+        </div>
       </div>
     </>
   );
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Header  — left avatar REMOVED, only right profile dropdown remains
+// ─────────────────────────────────────────────────────────────────────────────
 const Header = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
-  const { logout } = useAuth();
-  
+  const { logout, shopName } = useAuth();
+  const words = (shopName || 'AK').trim().split(' ');
+  const initials = words.slice(0, 2).map((w: string) => w[0]).join('').toUpperCase();
+
   const handleLogout = () => {
     logout();
     window.location.href = '/login';
   };
 
   return (
-    <header className="flex items-center justify-between px-6 py-4 bg-white border-b border-slate-200 sticky top-0 z-10 print:hidden">
-      <div className="flex items-center">
-        <button onClick={toggleSidebar} className="text-slate-500 focus:outline-none lg:hidden mr-4">
-          <Menu className="w-6 h-6" />
+    <header className="flex items-center justify-between px-6 py-3.5 bg-white border-b border-slate-200 sticky top-0 z-10 print:hidden">
+      {/* Left: hamburger only (no avatar) */}
+      <button onClick={toggleSidebar} className="text-slate-500 focus:outline-none lg:hidden">
+        <Menu className="w-6 h-6" />
+      </button>
+
+      {/* Spacer so right side stays right on desktop too */}
+      <div className="flex-1" />
+
+      {/* Right: single profile dropdown */}
+      <div className="relative group">
+        <button className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-100 to-indigo-200 flex items-center justify-center border border-indigo-200 shadow-sm hover:shadow-md transition-all duration-200 focus:outline-none">
+          <span className="text-indigo-700 font-bold text-sm">{initials}</span>
         </button>
-        <div className="relative">
-          <span className="absolute inset-y-0 left-0 flex items-center pl-3">
-            <Search className="w-4 h-4 text-slate-400" />
-          </span>
-          <input className="w-48 lg:w-80 pl-10 pr-4 py-2 text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20" type="text" placeholder="Search accounts, bills..." />
+
+        {/* Dropdown */}
+        <div className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-xl border border-slate-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 overflow-hidden">
+          {/* Shop info */}
+          <div className="px-4 py-3 bg-slate-50 border-b border-slate-100">
+            <p className="text-sm font-semibold text-slate-800 truncate">{shopName || 'AK Fabrics'}</p>
+            <p className="text-xs text-slate-500 mt-0.5">Business Account</p>
+          </div>
+          {/* Logout */}
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-600 hover:bg-red-50 hover:text-red-600 transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            Logout
+          </button>
         </div>
-      </div>
-      <div className="flex items-center space-x-6">
-        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-xs border border-indigo-200">AK</div>
-        <button 
-          onClick={handleLogout}
-          className="text-sm text-slate-600 hover:text-slate-900 font-medium"
-        >
-          Logout
-        </button>
       </div>
     </header>
   );
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Auth guard
+// ─────────────────────────────────────────────────────────────────────────────
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
   const { isAuthenticated, isLoading } = useAuth();
-  
-  // Show loading spinner while checking authentication
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600" />
       </div>
     );
   }
-  
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
   return children;
 };
 
-// ✅ NEW: Scan Bill Page wrapper — renders scanner as a full page
-const ScanBillPage: React.FC = () => {
-  const navigate = React.useCallback((path: string) => {
-    window.location.hash = path;
-  }, []);
+// ─────────────────────────────────────────────────────────────────────────────
+// Scan Bill page
+// ─────────────────────────────────────────────────────────────────────────────
+const ScanBillPage: React.FC = () => (
+  <div className="min-h-full flex items-center justify-center">
+    <BarcodeScanner
+      onClose={() => window.history.back()}
+      onFound={(id: string) => { window.location.hash = `/purchase-invoice/${id}`; }}
+    />
+  </div>
+);
 
-  return (
-    <div className="min-h-full flex items-center justify-center">
-      <BarcodeScanner
-        onClose={() => window.history.back()}
-        onFound={(id: string) => {
-          window.location.hash = `/purchase-invoice/${id}`;
-        }}
-      />
-    </div>
-  );
-};
-
+// ─────────────────────────────────────────────────────────────────────────────
+// App content
+// ─────────────────────────────────────────────────────────────────────────────
 const AppContent: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [accounts, setAccounts] = useState<Account[]>([]); 
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
   const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
   const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
 
-
   const API = import.meta.env.VITE_API_URL;
   console.log("API URL:", API);
-  const getAuthHeaders = () => ({
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${localStorage.getItem("token")}`
-  });
+
   useEffect(() => {
     if (isAuthenticated && !isLoading) {
       fetchCategories();
@@ -237,371 +285,170 @@ const AppContent: React.FC = () => {
 
   const fetchAccounts = async () => {
     try {
-      const response = await fetch(`${API}/api/accounts`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setAccounts(data);
-      }
-    } catch (error) {
-      console.error("Failed to fetch accounts:", error);
-    }
+      const res = await fetch(`${API}/api/accounts`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
+      if (res.ok) setAccounts(await res.json());
+    } catch (e) { console.error("Failed to fetch accounts:", e); }
   };
 
   const fetchCategories = async () => {
     try {
-      const response = await fetch(`${API}/api/categories`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setCategories(data);
-      }
-    } catch (error) {
-      console.error("Failed to fetch categories:", error);
-    }
+      const res = await fetch(`${API}/api/categories`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
+      if (res.ok) setCategories(await res.json());
+    } catch (e) { console.error("Failed to fetch categories:", e); }
   };
 
   const fetchSubCategories = async () => {
     try {
-      const response = await fetch(`${API}/api/subcategories`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setSubCategories(data);
-      }
-    } catch (error) {
-      console.error("Failed to fetch sub-categories:", error);
-    }
+      const res = await fetch(`${API}/api/subcategories`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
+      if (res.ok) setSubCategories(await res.json());
+    } catch (e) { console.error("Failed to fetch sub-categories:", e); }
   };
 
   const fetchProducts = async () => {
-    const token = localStorage.getItem("token");
-    console.log("Local storage Token", token);
-
     try {
-      const response = await fetch(`${API}/api/products`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setProducts(data);
-      }
-    } catch (error) {
-      console.error("Failed to fetch products:", error);
-    }
+      const res = await fetch(`${API}/api/products`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
+      if (res.ok) setProducts(await res.json());
+    } catch (e) { console.error("Failed to fetch products:", e); }
   };
 
   const addTransaction = async (newTx: Transaction) => {
     setTransactions(prev => [newTx, ...prev]);
-
     if (newTx.items) {
       for (const item of newTx.items) {
         let stockType = "";
-
-        if (newTx.type === TransactionType.PURCHASE)
-          stockType = "PURCHASE";
-
-        if (newTx.type === TransactionType.PURCHASE_RETURN)
-          stockType = "RETURN";
-
+        if (newTx.type === TransactionType.PURCHASE) stockType = "PURCHASE";
+        if (newTx.type === TransactionType.PURCHASE_RETURN) stockType = "RETURN";
         if (!stockType) continue;
-
         await fetch(`${API}/api/stock`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`
-          },
-          body: JSON.stringify({
-            product_id: item.productId,
-            type: stockType,
-            quantity: item.quantity,
-            reference_id: newTx.id,
-            note: newTx.description
-          })
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
+          body: JSON.stringify({ product_id: item.productId, type: stockType, quantity: item.quantity, reference_id: newTx.id, note: newTx.description }),
         });
       }
-
       await fetchProducts();
     }
   };
 
   const addAccount = async (acc: Account) => {
     try {
-      const response = await fetch(`${API}/api/accounts`, {
+      const res = await fetch(`${API}/api/accounts`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        },
-        body: JSON.stringify(acc)
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
+        body: JSON.stringify(acc),
       });
-
-      if (response.ok) {
-        await fetchAccounts();
-      }
-    } catch (error) {
-      console.error("Failed to add account:", error);
-    }
+      if (res.ok) await fetchAccounts();
+    } catch (e) { console.error("Failed to add account:", e); }
   };
 
   const addCategory = async (form: FormData) => {
     try {
-      const response = await fetch(`${API}/api/categories`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        },
-        body: form
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setCategories(prev => [...prev, data]);
-      }
-    } catch (error) {
-      console.error("Failed to add category:", error);
-    }
+      const res = await fetch(`${API}/api/categories`, { method: "POST", headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }, body: form });
+      if (res.ok) { const d = await res.json(); setCategories(prev => [...prev, d]); }
+    } catch (e) { console.error(e); }
   };
 
   const updateCategory = async (id: string, form: FormData) => {
     try {
-      const response = await fetch(`${API}/api/categories/${id}`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        },
-        body: form
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setCategories(prev =>
-          prev.map(cat => (cat.id === data.id ? data : cat))
-        );
-      }
-    } catch (error) {
-      console.error("Failed to update category:", error);
-    }
+      const res = await fetch(`${API}/api/categories/${id}`, { method: "PUT", headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }, body: form });
+      if (res.ok) { const d = await res.json(); setCategories(prev => prev.map(c => c.id === d.id ? d : c)); }
+    } catch (e) { console.error(e); }
   };
 
   const deleteCategory = async (id: string) => {
     try {
-      const response = await fetch(`${API}/api/categories/${id}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        }
-      });
-
-      if (response.ok) {
-        setCategories(prev => prev.filter(cat => cat.id !== id));
-      }
-    } catch (error) {
-      console.error("Failed to delete category:", error);
-    }
+      const res = await fetch(`${API}/api/categories/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
+      if (res.ok) setCategories(prev => prev.filter(c => c.id !== id));
+    } catch (e) { console.error(e); }
   };
 
   const addSubCategory = async (form: FormData) => {
     try {
-      const response = await fetch(`${API}/api/subcategories`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        },
-        body: form
-      });
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        console.log("SERVER ERROR:", err);
-        alert(err.error || "Failed to create sub-category");
-        return;
-      }
-
-      const data = await response.json();
-      setSubCategories(prev => [...prev, data]);
-
-    } catch (error) {
-      console.error("Failed to add sub-category:", error);
-    }
+      const res = await fetch(`${API}/api/subcategories`, { method: "POST", headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }, body: form });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || "Failed"); return; }
+      const d = await res.json(); setSubCategories(prev => [...prev, d]);
+    } catch (e) { console.error(e); }
   };
 
   const updateSubCategory = async (id: string, form: FormData) => {
     try {
-      const response = await fetch(`${API}/api/subcategories/${id}`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        },
-        body: form
-      });
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        alert(err.error || "Failed to update sub-category");
-        return;
-      }
-
-      const data = await response.json();
-      setSubCategories(prev =>
-        prev.map(sub => sub.id === data.id ? data : sub)
-      );
-
-    } catch (error) {
-      console.error("Failed to update sub-category:", error);
-    }
+      const res = await fetch(`${API}/api/subcategories/${id}`, { method: "PUT", headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }, body: form });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || "Failed"); return; }
+      const d = await res.json(); setSubCategories(prev => prev.map(s => s.id === d.id ? d : s));
+    } catch (e) { console.error(e); }
   };
 
   const deleteSubCategory = async (id: string) => {
     try {
-      const response = await fetch(`${API}/api/subcategories/${id}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        }
-      });
-
-      if (response.ok) {
-        setSubCategories(prev => prev.filter(sub => sub.id !== id));
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        alert(`Failed to delete sub-category: ${errorData.error || response.statusText}`);
-      }
-
-    } catch (error) {
-      console.error("Failed to delete sub-category:", error);
-      alert("Failed to delete sub-category. Check console for details.");
-    }
+      const res = await fetch(`${API}/api/subcategories/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
+      if (res.ok) setSubCategories(prev => prev.filter(s => s.id !== id));
+      else { const e = await res.json().catch(() => ({})); alert(e.error || "Failed"); }
+    } catch (e) { console.error(e); alert("Failed to delete sub-category."); }
   };
 
   const addProduct = async (form: FormData) => {
-    const token = localStorage.getItem("token");
-    console.log("Sending token:", localStorage.getItem("token"));
-
-    const response = await fetch(`${API}/api/products`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`
-      },
-      body: form
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      setProducts(prev => [...prev, data]);
-    }
+    const res = await fetch(`${API}/api/products`, { method: "POST", headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }, body: form });
+    if (res.ok) { const d = await res.json(); setProducts(prev => [...prev, d]); }
   };
 
   const updateProduct = async (id: string, form: FormData) => {
-    const token = localStorage.getItem("token");
-
-    const response = await fetch(`${API}/api/products/${id}`, {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${token}`
-      },
-      body: form
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      setProducts(prev =>
-        prev.map(p => p.id === data.id ? data : p)
-      );
-    }
+    const res = await fetch(`${API}/api/products/${id}`, { method: "PUT", headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }, body: form });
+    if (res.ok) { const d = await res.json(); setProducts(prev => prev.map(p => p.id === d.id ? d : p)); }
   };
 
   const deleteProduct = async (id: string) => {
     try {
-      const response = await fetch(`${API}/api/products/${id}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        }
-      });
-
-      if (response.ok) {
-        setProducts(prev => prev.filter(p => p.id !== id));
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        alert(`Failed to delete product: ${errorData.error || response.statusText}`);
-      }
-
-    } catch (error) {
-      console.error("Failed to delete product:", error);
-      alert("Failed to delete product. Check console for details.");
-    }
+      const res = await fetch(`${API}/api/products/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
+      if (res.ok) setProducts(prev => prev.filter(p => p.id !== id));
+      else { const e = await res.json().catch(() => ({})); alert(e.error || "Failed"); }
+    } catch (e) { console.error(e); alert("Failed to delete product."); }
   };
 
   return (
     <Router>
       <div className="flex h-screen bg-slate-50 overflow-hidden">
-        {isAuthenticated && !isLoading && <Sidebar isOpen={sidebarOpen} toggle={() => setSidebarOpen(!sidebarOpen)} />}
+        {isAuthenticated && !isLoading && (
+          <Sidebar isOpen={sidebarOpen} toggle={() => setSidebarOpen(!sidebarOpen)} />
+        )}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {isAuthenticated && !isLoading && <Header toggleSidebar={() => setSidebarOpen(!sidebarOpen)} />}
+          {isAuthenticated && !isLoading && (
+            <Header toggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
+          )}
           <main className={`flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth print:p-0 ${!isAuthenticated ? 'flex items-center justify-center' : ''}`}>
             <Routes>
-
               <Route path="/login" element={<Login />} />
 
-              <Route path="/" element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              } />
+              <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
 
               <Route path="/sales" element={
                 <ProtectedRoute>
-                  <Transactions typeFilter={TransactionType.SALE} transactions={transactions} accounts={accounts} products={products} onAdd={addTransaction} title="Sales Receipts" />
+                  <Transactions typeFilter={TransactionType.SALE} transactions={transactions} accounts={accounts} products={products} onAdd={addTransaction} title="Sales Bill" />
                 </ProtectedRoute>
               } />
-<Route path="/sales/:id" element={<SalesInvoicePage />} />
-              <Route path="/stock-report" element={
-                <ProtectedRoute>
-                  <StockReport />
-                </ProtectedRoute>
-              } />
+
+              <Route path="/sales-receipts" element={<ProtectedRoute><SalesReceipts /></ProtectedRoute>} />
+              <Route path="/sales/:id" element={<SalesInvoicePage />} />
+              <Route path="/sales/:id/edit" element={<ProtectedRoute><SalesEditPage /></ProtectedRoute>} />
+              <Route path="/stock-report" element={<ProtectedRoute><StockReport /></ProtectedRoute>} />
 
               <Route path="/purchases" element={
                 <ProtectedRoute>
-                  <Transactions typeFilter={TransactionType.PURCHASE} transactions={transactions} accounts={accounts} products={products} onAdd={addTransaction} title="Purchase Orders" />
+                  <Transactions typeFilter={TransactionType.PURCHASE} transactions={transactions} accounts={accounts} products={products} onAdd={addTransaction} title="Purchase Bill" />
                 </ProtectedRoute>
               } />
 
+              <Route path="/purchase-receipts" element={<ProtectedRoute><PurchaseReceipts /></ProtectedRoute>} />
               <Route path="/payments" element={
                 <ProtectedRoute>
                   <Transactions typeFilter={TransactionType.PAYMENT} transactions={transactions} accounts={accounts} products={products} onAdd={addTransaction} title="Payments & Receipts" />
                 </ProtectedRoute>
               } />
-
               <Route path="/returns" element={
                 <ProtectedRoute>
                   <Transactions typeFilter="RETURNS" transactions={transactions} accounts={accounts} products={products} onAdd={addTransaction} title="Returns Management" />
                 </ProtectedRoute>
               } />
 
-              {/* ✅ NEW: Scan Bill Route */}
-              <Route path="/scan-bill" element={
-                <ProtectedRoute>
-                  <ScanBillPage />
-                </ProtectedRoute>
-              } />
+              <Route path="/scan-bill" element={<ProtectedRoute><ScanBillPage /></ProtectedRoute>} />
 
               <Route path="/inventory" element={
                 <ProtectedRoute>
@@ -615,11 +462,7 @@ const AppContent: React.FC = () => {
                 </ProtectedRoute>
               } />
 
-              <Route path="/catalogue" element={
-                <ProtectedRoute>
-                  <Catalogue products={products} />
-                </ProtectedRoute>
-              } />
+              <Route path="/catalogue" element={<ProtectedRoute><Catalogue products={products} /></ProtectedRoute>} />
 
               <Route path="/categories" element={
                 <ProtectedRoute>
@@ -634,55 +477,18 @@ const AppContent: React.FC = () => {
               } />
 
               <Route path="/purchase-invoice/:id" element={<PurchaseInvoicePage />} />
+              <Route path="/purchase-invoice/:id/edit" element={<ProtectedRoute><PurchaseEditPage /></ProtectedRoute>} />
 
-              <Route path="/stock-in" element={
-                <ProtectedRoute>
-                  <StockJournal type={TransactionType.STOCK_IN} products={products} refreshProducts={fetchProducts} />
-                </ProtectedRoute>
-              } />
+              <Route path="/stock-in" element={<ProtectedRoute><StockJournal type={TransactionType.STOCK_IN} products={products} refreshProducts={fetchProducts} /></ProtectedRoute>} />
+              <Route path="/stock-out" element={<ProtectedRoute><StockJournal type={TransactionType.STOCK_OUT} products={products} refreshProducts={fetchProducts} /></ProtectedRoute>} />
 
-              <Route path="/stock-out" element={
-                <ProtectedRoute>
-                  <StockJournal type={TransactionType.STOCK_OUT} products={products} refreshProducts={fetchProducts} />
-                </ProtectedRoute>
-              } />
+              <Route path="/report-profit" element={<ProtectedRoute><ProfitReport transactions={transactions} products={products} /></ProtectedRoute>} />
+              <Route path="/report-cash" element={<ProtectedRoute><CashReport accounts={accounts} transactions={transactions} /></ProtectedRoute>} />
+              <Route path="/report-bank" element={<ProtectedRoute><BankReport accounts={accounts} transactions={transactions} /></ProtectedRoute>} />
 
-              <Route path="/report-profit" element={
-                <ProtectedRoute>
-                  <ProfitReport transactions={transactions} products={products} />
-                </ProtectedRoute>
-              } />
-
-              <Route path="/report-cash" element={
-                <ProtectedRoute>
-                  <CashReport accounts={accounts} transactions={transactions} />
-                </ProtectedRoute>
-              } />
-
-              <Route path="/report-bank" element={
-                <ProtectedRoute>
-                  <BankReport accounts={accounts} transactions={transactions} />
-                </ProtectedRoute>
-              } />
-
-              <Route path="/customers" element={
-                <ProtectedRoute>
-                  <LedgerList filterType={AccountType.CUSTOMER} accounts={accounts} transactions={transactions} onAddAccount={addAccount} />
-                </ProtectedRoute>
-              } />
-
-              <Route path="/vendors" element={
-                <ProtectedRoute>
-                  <LedgerList filterType={AccountType.VENDOR} accounts={accounts} transactions={transactions} onAddAccount={addAccount} />
-                </ProtectedRoute>
-              } />
-
-              <Route path="/ledgers/:id" element={
-                <ProtectedRoute>
-                  <LedgerDetails accounts={accounts} transactions={transactions} />
-                </ProtectedRoute>
-              } />
-
+              <Route path="/customers" element={<ProtectedRoute><LedgerList filterType={AccountType.CUSTOMER} accounts={accounts} transactions={transactions} onAddAccount={addAccount} /></ProtectedRoute>} />
+              <Route path="/vendors" element={<ProtectedRoute><LedgerList filterType={AccountType.VENDOR} accounts={accounts} transactions={transactions} onAddAccount={addAccount} /></ProtectedRoute>} />
+              <Route path="/ledgers/:id" element={<ProtectedRoute><LedgerDetails accounts={accounts} transactions={transactions} /></ProtectedRoute>} />
             </Routes>
           </main>
         </div>
@@ -691,12 +497,10 @@ const AppContent: React.FC = () => {
   );
 };
 
-const App: React.FC = () => {
-  return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
-  );
-};
+const App: React.FC = () => (
+  <AuthProvider>
+    <AppContent />
+  </AuthProvider>
+);
 
 export default App;

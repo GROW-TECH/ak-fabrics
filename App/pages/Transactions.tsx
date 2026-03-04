@@ -1,13 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Search, Plus, X, Eye, Download, Pencil, Trash2, ScanLine, Camera, Upload, CheckCircle, AlertCircle, Image as ImageIcon } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  Search, Plus, X, Eye, Pencil, ScanLine, Upload, Download, Trash2,
+  CheckCircle, AlertCircle, Image as ImageIcon, Camera,
+  TrendingUp, ShoppingCart, CalendarDays, Banknote,
+} from 'lucide-react';
 import { Transaction, Account, TransactionType, Product } from '../types';
 import VoucherEntry from './VoucherEntry';
 import PurchaseForm from './PurchaseForm';
 import SalesForm from './SalesForm';
 import { useNavigate } from 'react-router-dom';
-import { BrowserMultiFormatReader } from '@zxing/library';
 import InvoiceModal from '../components/InvoiceModal';
-import PurchaseInvoiceModal from "../components/PurchaseInvoiceModal";
+import PurchaseInvoiceModal from '../components/PurchaseInvoiceModal';
 
 interface TransactionsProps {
   typeFilter: TransactionType | 'RETURNS' | 'ALL';
@@ -20,34 +23,127 @@ interface TransactionsProps {
 
 const API = import.meta.env.VITE_API_URL;
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Summary Stats Cards
+// ─────────────────────────────────────────────────────────────────────────────
+interface SummaryStatsProps {
+  data: any[];
+  type: 'sales' | 'purchases';
+}
+
+const SummaryStats: React.FC<SummaryStatsProps> = ({ data, type }) => {
+  const today = new Date().toDateString();
+
+  const totalCount   = data.length;
+  const totalRevenue = data.reduce((sum, item) => sum + Number(item.total_amount || 0), 0);
+
+  const todayItems   = data.filter(item => new Date(item.created_at).toDateString() === today);
+  const todayCount   = todayItems.length;
+  const todayRevenue = todayItems.reduce((sum, item) => sum + Number(item.total_amount || 0), 0);
+
+  const isSale = type === 'sales';
+
+  const cards = [
+    {
+      label:   `Total ${isSale ? 'Sales' : 'Purchases'} Count`,
+      value:   totalCount.toLocaleString(),
+      sub:     'Overall business volume',
+      icon:    <ShoppingCart className="w-5 h-5" />,
+      accent:  'from-indigo-500 to-violet-600',
+      bg:      'bg-indigo-50',
+      text:    'text-indigo-600',
+      border:  'border-indigo-100',
+    },
+    {
+      label:   `Total ${isSale ? 'Revenue' : 'Spend'}`,
+      value:   `₹${totalRevenue.toLocaleString('en-IN')}`,
+      sub:     'Complete business earnings',
+      icon:    <TrendingUp className="w-5 h-5" />,
+      accent:  'from-emerald-500 to-teal-600',
+      bg:      'bg-emerald-50',
+      text:    'text-emerald-600',
+      border:  'border-emerald-100',
+    },
+    {
+      label:   "Today's Performance",
+      value:   todayCount.toLocaleString(),
+      sub:     'Daily activity count',
+      icon:    <CalendarDays className="w-5 h-5" />,
+      accent:  'from-amber-500 to-orange-500',
+      bg:      'bg-amber-50',
+      text:    'text-amber-600',
+      border:  'border-amber-100',
+    },
+    {
+      label:   "Today's Revenue",
+      value:   `₹${todayRevenue.toLocaleString('en-IN')}`,
+      sub:     'Daily earnings amount',
+      icon:    <Banknote className="w-5 h-5" />,
+      accent:  'from-sky-500 to-cyan-600',
+      bg:      'bg-sky-50',
+      text:    'text-sky-600',
+      border:  'border-sky-100',
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {cards.map((card) => (
+        <div
+          key={card.label}
+          className={`relative flex items-center gap-3 p-4 rounded-2xl border ${card.border} bg-white shadow-sm overflow-hidden`}
+        >
+          {/* gradient accent bar */}
+          <div className={`absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r ${card.accent}`} />
+
+          {/* icon */}
+          <div className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center ${card.bg} ${card.text}`}>
+            {card.icon}
+          </div>
+
+          {/* text */}
+          <div className="min-w-0">
+            <p className="text-xs text-slate-400 font-medium leading-tight truncate">{card.label}</p>
+            <p className={`text-lg font-extrabold leading-tight ${card.text}`}>{card.value}</p>
+            <p className="text-[10px] text-slate-400 leading-tight truncate">{card.sub}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Main Component
+// ─────────────────────────────────────────────────────────────────────────────
 const Transactions: React.FC<TransactionsProps> = ({
   typeFilter, transactions, accounts, products, onAdd, title,
 }) => {
-  const [searchTerm, setSearchTerm]             = useState('');
-  const [isAdding, setIsAdding]                 = useState(false);
-  const [purchases, setPurchases]               = useState<any[]>([]);
-  const [sales, setSales]                       = useState<any[]>([]);
-  const [viewingInvoice, setViewingInvoice]     = useState<Transaction | null>(null);
-  const [editingPurchase, setEditingPurchase]   = useState<any | null>(null);
-  const [editingSale, setEditingSale]           = useState<any | null>(null);
+  const [searchTerm, setSearchTerm]           = useState('');
+  const [isAdding, setIsAdding]               = useState(false);
+  const [purchases, setPurchases]             = useState<any[]>([]);
+  const [sales, setSales]                     = useState<any[]>([]);
+  const [viewingInvoice, setViewingInvoice]   = useState<Transaction | null>(null);
+  const [editingPurchase, setEditingPurchase] = useState<any | null>(null);
+  const [editingSale, setEditingSale]         = useState<any | null>(null);
   const [selectedPurchase, setSelectedPurchase] = useState<any | null>(null);
-  const [showScanner, setShowScanner]           = useState(false);
-  const [activeTab, setActiveTab]               = useState<'transactions' | 'uploaded-invoices'>('transactions');
+  const [showScanner, setShowScanner]         = useState(false);
+  const [activeTab, setActiveTab]             = useState<'transactions' | 'uploaded-invoices'>('transactions');
   const [uploadedInvoices, setUploadedInvoices] = useState<any[]>([]);
   const [uploadedLoading, setUploadedLoading] = useState(false);
   const navigate = useNavigate();
 
-  // ── Fetch ─────────────────────────────────────────────────────────────────
+  // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchPurchases = async () => {
     const res = await fetch(`${API}/api/purchases`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
     });
     if (res.ok) setPurchases(await res.json());
   };
 
   const fetchSales = async () => {
     const res = await fetch(`${API}/api/sales`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
     });
     if (res.ok) setSales(await res.json());
   };
@@ -55,50 +151,21 @@ const Transactions: React.FC<TransactionsProps> = ({
   const fetchUploadedInvoices = async () => {
     try {
       setUploadedLoading(true);
-      console.log('Fetching uploaded invoices for type:', typeFilter);
       const token = localStorage.getItem('token');
-      console.log('Token exists:', !!token);
-      
-      const salesEndpoint = `${API}/api/sales/with-images`;
-      const purchasesEndpoint = `${API}/api/purchases/with-images`;
-      
-      console.log('Sales endpoint:', salesEndpoint);
-      console.log('Purchases endpoint:', purchasesEndpoint);
 
-      const [salesRes, purchasesRes] = await Promise.all([
-        fetch(salesEndpoint, {
+      if (typeFilter === TransactionType.PURCHASE) {
+        const res = await fetch(`${API}/api/purchases/with-images`, {
           headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch(purchasesEndpoint, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-      ]);
-
-      console.log('Sales response status:', salesRes.status);
-      console.log('Purchases response status:', purchasesRes.status);
-      console.log('Sales response ok:', salesRes.ok);
-      console.log('Purchases response ok:', purchasesRes.ok);
-
-      if (!salesRes.ok || !purchasesRes.ok) {
-        console.error('API response error:', {
-          salesStatus: salesRes.status,
-          purchasesStatus: purchasesRes.status,
-          salesText: salesRes.statusText,
-          purchasesText: purchasesRes.statusText
         });
-        throw new Error('Failed to fetch uploaded invoices');
+        if (!res.ok) throw new Error('Failed');
+        setUploadedInvoices(await res.json());
+      } else if (typeFilter === TransactionType.SALE) {
+        const res = await fetch(`${API}/api/sales/with-images`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error('Failed');
+        setUploadedInvoices(await res.json());
       }
-
-      const salesData = await salesRes.json();
-      const purchasesData = await purchasesRes.json();
-      
-      console.log('Sales data:', salesData);
-      console.log('Purchases data:', purchasesData);
-
-      const allInvoices = [...salesData, ...purchasesData];
-      console.log('All invoices:', allInvoices);
-      
-      setUploadedInvoices(allInvoices);
     } catch (error: any) {
       console.error('Error fetching uploaded invoices:', error);
       setUploadedInvoices([]);
@@ -110,13 +177,13 @@ const Transactions: React.FC<TransactionsProps> = ({
   useEffect(() => {
     if (typeFilter === TransactionType.PURCHASE) fetchPurchases();
     if (typeFilter === TransactionType.SALE)     fetchSales();
-    if (activeTab === 'uploaded-invoices') fetchUploadedInvoices();
+    if (activeTab === 'uploaded-invoices')       fetchUploadedInvoices();
   }, [typeFilter, activeTab]);
 
-  // ── Filtered (for non-purchase/sale tabs) ─────────────────────────────────
+  // ── Filtered transactions (non-purchase/sale) ──────────────────────────────
   const filtered = transactions.filter((t) => {
     const matchesType =
-      typeFilter === 'ALL' ? true
+      typeFilter === 'ALL'     ? true
       : typeFilter === 'RETURNS'
         ? t.type === TransactionType.SALES_RETURN || t.type === TransactionType.PURCHASE_RETURN
         : t.type === typeFilter;
@@ -128,137 +195,241 @@ const Transactions: React.FC<TransactionsProps> = ({
     );
   });
 
-  // ── Form actions ───────────────────────────────────────────────────────────
   const closeForm = () => {
     setIsAdding(false);
     setEditingSale(null);
     setEditingPurchase(null);
   };
 
-  // ── Icon button helper ─────────────────────────────────────────────────────
+  const downloadInvoice = async (
+    module: 'sales' | 'purchases',
+    id: string,
+    invoiceNo: string
+  ) => {
+    try {
+      const res = await fetch(`${API}/api/${module}/${id}/download`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        return alert(err.error || "Download failed");
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${invoiceNo || "invoice"}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      alert("Download failed");
+    }
+  };
+
+  const deleteSale = async (id: string) => {
+    if (!window.confirm("Delete this sale invoice?")) return;
+    try {
+      const res = await fetch(`${API}/api/sales/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        return alert(err.error || "Delete failed");
+      }
+      fetchSales();
+    } catch (err) {
+      console.error(err);
+      alert("Delete failed");
+    }
+  };
+
+  const deletePurchase = async (id: string) => {
+    if (!window.confirm("Delete this purchase invoice?")) return;
+    try {
+      const res = await fetch(`${API}/api/purchases/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        return alert(err.error || "Delete failed");
+      }
+      fetchPurchases();
+    } catch (err) {
+      console.error(err);
+      alert("Delete failed");
+    }
+  };
+
+  const openEditSale = async (id: string) => {
+    try {
+      const res = await fetch(`${API}/api/sales/${id}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        return alert(err.error || "Failed to load sale details");
+      }
+      const data = await res.json();
+      setEditingPurchase(null);
+      setEditingSale(data);
+      setIsAdding(false);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to load sale details");
+    }
+  };
+
+  const openEditPurchase = async (id: string) => {
+    try {
+      const res = await fetch(`${API}/api/purchases/${id}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        return alert(err.error || "Failed to load purchase details");
+      }
+      const data = await res.json();
+      setEditingSale(null);
+      setEditingPurchase(data);
+      setIsAdding(false);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to load purchase details");
+    }
+  };
+
   const IconBtn: React.FC<{
-    onClick: () => void;
+    onClick: (e: any) => void;
     title: string;
     cls?: string;
     children: React.ReactNode;
-  }> = ({ onClick, title, cls = "", children }) => (
-    <button
-      onClick={onClick}
-      title={title}
-      className={`p-1.5 rounded-lg transition ${cls}`}
-    >
+  }> = ({ onClick, title, cls = '', children }) => (
+    <button onClick={onClick} title={title} className={`p-1.5 rounded-lg transition ${cls}`}>
       {children}
     </button>
   );
 
-  // ── Form view (if adding/editing) ───────────────────────────────────────────
+  // ── FORM VIEW ──────────────────────────────────────────────────────────────
   if (isAdding || editingSale || editingPurchase) {
-    return (
-      <div className="space-y-5 max-w-6xl mx-auto">
-        {editingPurchase ? (
+
+    if (typeFilter === TransactionType.PURCHASE || editingPurchase) {
+      return (
+        <div className="space-y-5 max-w-6xl mx-auto">
           <PurchaseForm
             accounts={accounts}
             products={products}
-            initialData={editingPurchase}
+            initialData={editingPurchase || undefined}
             onSubmit={async (data) => {
               try {
-                const url    = `${API}/api/purchases/${editingPurchase.id}`;
-                const method = "PUT";
-
-                const payload = {
-                  vendorId:    data.vendorId,
-                  items:       data.items.map((item: any) => ({
-                    hsn:         item.hsn         || "",
-                    size:        item.size        || "",
-                    description: item.description || "",
-                    rate:        item.rate        || 0,
-                    qty:         item.qty         || 1,
-                    discount:    item.discount    || 0,
-                    total:       item.total       || 0,
-                  })),
-                };
-
-                console.log("Sending purchase payload:", payload);
-
+                const isEdit = Boolean(editingPurchase?.id);
+                const url    = isEdit ? `${API}/api/purchases/${editingPurchase.id}` : `${API}/api/purchases`;
                 const res = await fetch(url, {
-                  method,
+                  method: isEdit ? 'PUT' : 'POST',
                   headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${localStorage.getItem("token")}`,
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${localStorage.getItem('token')}`,
                   },
-                  body: JSON.stringify(payload),
+                  body: JSON.stringify({
+                    vendor_id:     data.vendor_id,
+                    payment_mode:  data.payment_mode  || 'CREDIT',
+                    paid_amount:   data.paid_amount   || 0,
+                    through_agent: data.through_agent || null,
+                    notes:         data.notes         || null,
+                    total_amount:  data.total_amount,
+                    items: data.items.map((item: any) => ({
+                      productId:   item.productId   || '',
+                      hsn:         item.hsn         || '',
+                      size:        item.size        || '',
+                      description: item.description || '',
+                      rate:        item.rate        || 0,
+                      qty:         item.qty         || 1,
+                      discount:    item.discount    || 0,
+                      total:       item.total       || 0,
+                    })),
+                  }),
                 });
-
                 if (!res.ok) {
                   const err = await res.json().catch(() => ({}));
-                  return alert("Save failed: " + (err.error || res.statusText));
+                  return alert('Save failed: ' + (err.error || res.statusText));
                 }
-
                 closeForm();
                 fetchPurchases();
               } catch (err) {
                 console.error(err);
-                alert("Network error");
+                alert('Network error');
               }
             }}
           />
-        ) : typeFilter === TransactionType.SALE ? (
+        </div>
+      );
+    }
+
+    if (typeFilter === TransactionType.SALE || editingSale) {
+      return (
+        <div className="space-y-5 max-w-6xl mx-auto">
           <SalesForm
             accounts={accounts}
             products={products}
-            initialData={editingSale}
+            initialData={editingSale || undefined}
             onSubmit={async (data) => {
               try {
                 const url    = editingSale ? `${API}/api/sales/${editingSale.id}` : `${API}/api/sales`;
-                const method = editingSale ? "PUT" : "POST";
-
+                const method = editingSale ? 'PUT' : 'POST';
                 const res = await fetch(url, {
                   method,
                   headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${localStorage.getItem("token")}`,
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${localStorage.getItem('token')}`,
                   },
                   body: JSON.stringify({
                     customerId:  data.customerId,
                     items:       data.items,
                     grandTotal:  data.grandTotal,
                     paidAmount:  data.paidAmount  || 0,
-                    paymentMode: data.paymentMode || "CREDIT",
-                    through:     data.through     || "",
-                    notes:       data.notes       || "",
+                    paymentMode: data.paymentMode || 'CREDIT',
+                    through:     data.through     || '',
+                    notes:       data.notes       || '',
+                    customerPincode: data.customerPincode || '',
                   }),
                 });
-
                 if (!res.ok) {
                   const err = await res.json().catch(() => ({}));
-                  return alert("Save failed: " + (err.error || res.statusText));
+                  return alert('Save failed: ' + (err.error || res.statusText));
                 }
-
                 closeForm();
                 fetchSales();
               } catch (err) {
                 console.error(err);
-                alert("Network error");
+                alert('Network error');
               }
             }}
           />
-        ) : (
-          <VoucherEntry
-            accounts={accounts}
-            products={products}
-            onAdd={(tx) => { onAdd(tx); closeForm(); }}
-            initialType={
-              typeFilter === 'RETURNS' ? TransactionType.SALES_RETURN
-              : typeFilter === 'ALL'   ? TransactionType.SALE
-              : typeFilter
-            }
-          />
-        )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-5 max-w-6xl mx-auto">
+        <VoucherEntry
+          accounts={accounts}
+          products={products}
+          onAdd={(tx) => { onAdd(tx); closeForm(); }}
+          initialType={
+            typeFilter === 'RETURNS' ? TransactionType.SALES_RETURN
+            : typeFilter === 'ALL'   ? TransactionType.SALE
+            : typeFilter
+          }
+        />
       </div>
     );
   }
 
-  // ── LIST VIEW ─────────────────────────────────────────────────────────────
+  // ── LIST VIEW ──────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
 
@@ -281,25 +452,34 @@ const Transactions: React.FC<TransactionsProps> = ({
           <p className="text-slate-500 text-sm">Review history or generate GST-compliant invoices.</p>
         </div>
         <div className="flex gap-2">
-          {/* Scan Bill Button - Only for Sales and Purchases */}
           {(typeFilter === TransactionType.SALE || typeFilter === TransactionType.PURCHASE) && (
             <button
               onClick={() => setShowScanner(true)}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm text-white shadow-lg transition hover:opacity-90"
-              style={{ background: "linear-gradient(135deg, #0891b2, #6366f1)" }}>
-              <ScanLine className="w-4 h-4" />
-              Scan Bill
+              style={{ background: 'linear-gradient(135deg, #0891b2, #6366f1)' }}>
+              <ScanLine className="w-4 h-4" /> Scan Bill
             </button>
           )}
           <button
             onClick={() => { setEditingSale(null); setEditingPurchase(null); setIsAdding(true); }}
             className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 shadow-md transition">
-            <Plus className="w-4 h-4" /> New Voucher
+            <Plus className="w-4 h-4" />
+            {typeFilter === TransactionType.PURCHASE ? 'New Purchase'
+              : typeFilter === TransactionType.SALE  ? 'New Sale'
+              : 'New Voucher'}
           </button>
         </div>
       </div>
 
-      {/* Tab Navigation - Only for Sales and Purchases */}
+      {/* ── SUMMARY STATS (top) ── */}
+      {typeFilter === TransactionType.SALE && (
+        <SummaryStats data={sales} type="sales" />
+      )}
+      {typeFilter === TransactionType.PURCHASE && (
+        <SummaryStats data={purchases} type="purchases" />
+      )}
+
+      {/* Tab Navigation */}
       {(typeFilter === TransactionType.SALE || typeFilter === TransactionType.PURCHASE) && (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
           <div className="flex border-b border-slate-100">
@@ -329,25 +509,31 @@ const Transactions: React.FC<TransactionsProps> = ({
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
 
-        {/* Search bar */}
+        {/* Search */}
         <div className="p-4 border-b border-slate-100">
           <div className="relative w-full md:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input type="text" placeholder={`Search ${title.toLowerCase()}...`}
+            <input
+              type="text"
+              placeholder={`Search ${title.toLowerCase()}...`}
               className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
         </div>
 
         <div className="overflow-x-auto">
 
-          {/* ══════════════════ UPLOADED INVOICES TAB ══════════════════ */}
+          {/* ══ UPLOADED INVOICES TAB ══════════════════════════════════════ */}
           {activeTab === 'uploaded-invoices' && (
             <div className="p-6">
-              <h3 className="text-lg font-semibold text-slate-800 mb-4">Uploaded Invoice Images</h3>
+              <h3 className="text-lg font-semibold text-slate-800 mb-4">
+                Uploaded {typeFilter === TransactionType.PURCHASE ? 'Purchase' : 'Sales'} Invoices
+              </h3>
               {uploadedLoading ? (
                 <div className="flex flex-col items-center justify-center py-12">
-                  <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                  <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4" />
                   <p className="text-slate-500 text-sm">Loading uploaded invoices...</p>
                 </div>
               ) : uploadedInvoices.length === 0 ? (
@@ -361,22 +547,18 @@ const Transactions: React.FC<TransactionsProps> = ({
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {uploadedInvoices.map((invoice) => (
-                    <div key={`${invoice.type}-${invoice.id}`} 
-                         className="border border-slate-200 rounded-xl overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
-                         onClick={() => {
-                           if (invoice.type === 'SALE') {
-                             navigate(`/sales/${invoice.id}`);
-                           } else {
-                             navigate(`/purchase-invoice/${invoice.id}`);
-                           }
-                         }}>
+                    <div
+                      key={`${invoice.type}-${invoice.id}`}
+                      className="border border-slate-200 rounded-xl overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+                      onClick={() => {
+                        if (invoice.imageUrl) {
+                          window.open(invoice.imageUrl, "_blank", "noopener,noreferrer");
+                        }
+                      }}
+                    >
                       <div className="aspect-video bg-slate-100 relative">
                         {invoice.imageUrl ? (
-                          <img 
-                            src={invoice.imageUrl} 
-                            alt={`${invoice.type} Invoice ${invoice.image_name || "Uploaded Invoice Image"}`}
-                            className="w-full h-full object-cover"
-                          />
+                          <img src={invoice.imageUrl} alt={`Invoice ${invoice.invoice_no}`} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
                             <ImageIcon className="w-12 h-12 text-slate-300" />
@@ -384,9 +566,7 @@ const Transactions: React.FC<TransactionsProps> = ({
                         )}
                         <div className="absolute top-2 right-2">
                           <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                            invoice.type === 'SALE' 
-                              ? 'bg-emerald-100 text-emerald-700' 
-                              : 'bg-blue-100 text-blue-700'
+                            invoice.type === 'SALE' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
                           }`}>
                             {invoice.type}
                           </span>
@@ -394,18 +574,21 @@ const Transactions: React.FC<TransactionsProps> = ({
                       </div>
                       <div className="p-4">
                         <p className="font-semibold text-slate-800 text-sm">{invoice.invoice_no}</p>
-                        <p className="text-xs text-slate-500 mt-1">
-                          {new Date(invoice.created_at).toLocaleDateString()}
-                        </p>
+                        <p className="text-xs text-slate-500 mt-1">{new Date(invoice.created_at).toLocaleDateString()}</p>
                         <p className="text-xs text-slate-400 mt-1">
                           {invoice.type === 'SALE' ? (invoice.customer_name || '') : (invoice.vendor_name || '')}
                         </p>
                         {invoice.total_amount && Number(invoice.total_amount) > 0 && (
-                          <p className="text-sm font-bold text-slate-900 mt-2">
-                            ₹{Number(invoice.total_amount).toLocaleString()}
-                          </p>
+                          <div className="mt-2 space-y-1">
+                            <p className="text-sm font-bold text-slate-900">Total: ₹{Number(invoice.total_amount).toLocaleString()}</p>
+                            {invoice.paid_amount && Number(invoice.paid_amount) > 0 && (
+                              <p className="text-xs text-green-600">Paid: ₹{Number(invoice.paid_amount).toLocaleString()}</p>
+                            )}
+                            {invoice.balance_amount && Number(invoice.balance_amount) > 0 && (
+                              <p className="text-xs text-red-600">Balance: ₹{Number(invoice.balance_amount).toLocaleString()}</p>
+                            )}
+                          </div>
                         )}
-                       
                       </div>
                     </div>
                   ))}
@@ -414,10 +597,10 @@ const Transactions: React.FC<TransactionsProps> = ({
             </div>
           )}
 
-          {/* ══════════════════ TRANSACTIONS TAB ══════════════════ */}
+          {/* ══ TRANSACTIONS TAB ═══════════════════════════════════════════ */}
           {activeTab === 'transactions' && (
             <>
-              {/* ══════════════════ SALES TABLE ══════════════════ */}
+              {/* SALES TABLE */}
               {typeFilter === TransactionType.SALE && (() => {
                 const filteredSales = sales.filter(s =>
                   !searchTerm ||
@@ -429,23 +612,28 @@ const Transactions: React.FC<TransactionsProps> = ({
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-100">
                         <th className="px-3 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider w-8">#</th>
-                        <th className="px-3 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Date</th>
+                        <th className="px-3 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Created Date</th>
+                        <th className="px-3 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Updated Date</th>
                         <th className="px-3 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Invoice</th>
                         <th className="px-3 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Customer</th>
                         <th className="px-3 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Qty</th>
                         <th className="px-3 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Amount</th>
+                        <th className="px-3 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Already Paid</th>
                         <th className="px-3 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
                         <th className="px-3 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredSales.length === 0 ? (
-                        <tr><td colSpan={8} className="py-16 text-center text-slate-400 italic text-sm">No sales found.</td></tr>
+                        <tr><td colSpan={10} className="py-16 text-center text-slate-400 italic text-sm">No sales found.</td></tr>
                       ) : filteredSales.map((sale, idx) => (
                         <tr key={sale.id} className="border-b border-slate-50 hover:bg-slate-50/70 transition-colors">
                           <td className="px-3 py-3 text-xs text-slate-400 text-center">{idx + 1}</td>
                           <td className="px-3 py-3 text-xs text-slate-500 whitespace-nowrap">
-                            {new Date(sale.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" })}
+                            {new Date(sale.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
+                          </td>
+                          <td className="px-3 py-3 text-xs text-slate-500 whitespace-nowrap">
+                            {new Date(sale.updated_at || sale.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
                           </td>
                           <td className="px-3 py-3">
                             <span className="text-[10px] font-mono text-indigo-500 block">{sale.invoice_no}</span>
@@ -458,13 +646,16 @@ const Transactions: React.FC<TransactionsProps> = ({
                           <td className="px-3 py-3 text-right font-bold text-slate-900 whitespace-nowrap">
                             ₹{Number(sale.total_amount).toLocaleString()}
                           </td>
+                          <td className="px-3 py-3 text-right font-semibold text-slate-700 whitespace-nowrap">
+                            Rs {(sale.status === 'HALF_PAID' ? Number(sale.paid_amount || 0) : 0).toLocaleString()}
+                          </td>
                           <td className="px-3 py-3 text-center">
                             <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap ${
-                              sale.status === "PAID" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              : sale.status === "HALF_PAID" ? "bg-amber-50 text-amber-700 border-amber-200"
-                              : "bg-red-50 text-red-700 border-red-200"
+                              sale.status === 'PAID'      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                              : sale.status === 'HALF_PAID' ? 'bg-amber-200 text-amber-900 border-amber-400'
+                              : 'bg-rose-100 text-rose-800 border-rose-300'
                             }`}>
-                              {(sale.status || "NOT_PAID").replace("_", " ")}
+                              {(sale.status || 'NOT_PAID').replace('_', ' ')}
                             </span>
                           </td>
                           <td className="px-3 py-3 text-center">
@@ -473,9 +664,26 @@ const Transactions: React.FC<TransactionsProps> = ({
                                 cls="bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white">
                                 <Eye className="w-3.5 h-3.5" />
                               </IconBtn>
-                              <IconBtn onClick={() => setEditingSale(sale)} title="Edit"
-                                cls="bg-slate-50 text-slate-600 hover:bg-slate-600 hover:text-white">
+                              <IconBtn
+                                onClick={() => openEditSale(sale.id)}
+                                title="Edit"
+                                cls="bg-slate-50 text-slate-600 hover:bg-slate-600 hover:text-white"
+                              >
                                 <Pencil className="w-3.5 h-3.5" />
+                              </IconBtn>
+                              <IconBtn
+                                onClick={() => downloadInvoice('sales', sale.id, sale.invoice_no)}
+                                title="Download"
+                                cls="bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </IconBtn>
+                              <IconBtn
+                                onClick={() => deleteSale(sale.id)}
+                                title="Delete"
+                                cls="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
                               </IconBtn>
                             </div>
                           </td>
@@ -486,7 +694,7 @@ const Transactions: React.FC<TransactionsProps> = ({
                 );
               })()}
 
-              {/* ══════════════════ PURCHASES TABLE ══════════════════ */}
+              {/* PURCHASES TABLE */}
               {typeFilter === TransactionType.PURCHASE && (() => {
                 const filteredPurchases = purchases.filter(p =>
                   !searchTerm ||
@@ -499,56 +707,79 @@ const Transactions: React.FC<TransactionsProps> = ({
                       <tr className="bg-slate-50 border-b border-slate-100">
                         <th className="px-3 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider w-8">#</th>
                         <th className="px-3 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Invoice</th>
-                        <th className="px-3 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Date</th>
+                        <th className="px-3 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Created Date</th>
+                        <th className="px-3 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Updated Date</th>
                         <th className="px-3 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Vendor</th>
                         <th className="px-3 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Amount</th>
+                        <th className="px-3 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Already Paid</th>
                         <th className="px-3 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
                         <th className="px-3 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredPurchases.length === 0 ? (
-                        <tr><td colSpan={7} className="py-16 text-center text-slate-400 italic text-sm">No purchases found.</td></tr>
+                        <tr><td colSpan={9} className="py-16 text-center text-slate-400 italic text-sm">No purchases found.</td></tr>
                       ) : filteredPurchases.map((purchase, idx) => (
                         <tr key={purchase.id}
                           className="border-b border-slate-50 hover:bg-slate-50/70 transition-colors cursor-pointer"
                           onClick={() => navigate(`/purchase-invoice/${purchase.id}`)}>
-
                           <td className="px-3 py-3 text-xs text-slate-400 text-center">{idx + 1}</td>
-
-                          {/* Invoice number */}
                           <td className="px-3 py-3">
                             <span className="text-[10px] font-mono text-indigo-500 block">{purchase.invoice_no}</span>
                           </td>
-
                           <td className="px-3 py-3 text-xs text-slate-500 whitespace-nowrap">
-                            {new Date(purchase.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" })}
+                            {new Date(purchase.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
                           </td>
-
+                          <td className="px-3 py-3 text-xs text-slate-500 whitespace-nowrap">
+                            {new Date(purchase.updated_at || purchase.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
+                          </td>
                           <td className="px-3 py-3">
-                            <p className="font-semibold text-slate-800">{purchase.vendor_name || "N/A"}</p>
+                            <p className="font-semibold text-slate-800">{purchase.vendor_name || 'N/A'}</p>
                           </td>
-
                           <td className="px-3 py-3 text-right font-bold text-slate-900 whitespace-nowrap">
                             ₹{Number(purchase.total_amount).toLocaleString()}
                           </td>
-
-                          {/* Status badge */}
+                          <td className="px-3 py-3 text-right font-semibold text-slate-700 whitespace-nowrap">
+                            Rs {(purchase.payment_status === 'HALF_PAID' ? Number(purchase.paid_amount || 0) : 0).toLocaleString()}
+                          </td>
                           <td className="px-3 py-3 text-center">
                             <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap ${
-                              purchase.payment_status === "PAID" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              : purchase.payment_status === "HALF_PAID" ? "bg-amber-50 text-amber-700 border-amber-200"
-                              : "bg-red-50 text-red-700 border-red-200"
+                              purchase.payment_status === 'PAID'      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                              : purchase.payment_status === 'HALF_PAID' ? 'bg-amber-200 text-amber-900 border-amber-400'
+                              : 'bg-rose-100 text-rose-800 border-rose-300'
                             }`}>
-                              {(purchase.payment_status || "NOT_PAID").replace("_", " ")}
+                              {(purchase.payment_status || 'NOT_PAID').replace('_', ' ')}
                             </span>
                           </td>
-
                           <td className="px-3 py-3 text-center">
                             <div className="flex justify-center gap-1">
-                              <IconBtn onClick={(e) => { e.stopPropagation(); setEditingPurchase(purchase); }} title="Edit"
-                                cls="bg-slate-50 text-slate-600 hover:bg-slate-600 hover:text-white">
+                              <IconBtn
+                                onClick={(e) => { e.stopPropagation(); navigate(`/purchase-invoice/${purchase.id}`); }}
+                                title="View"
+                                cls="bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </IconBtn>
+                              <IconBtn
+                                onClick={(e) => { e.stopPropagation(); openEditPurchase(purchase.id); }}
+                                title="Edit"
+                                cls="bg-slate-50 text-slate-600 hover:bg-slate-600 hover:text-white"
+                              >
                                 <Pencil className="w-3.5 h-3.5" />
+                              </IconBtn>
+                              <IconBtn
+                                onClick={(e) => { e.stopPropagation(); downloadInvoice('purchases', purchase.id, purchase.invoice_no); }}
+                                title="Download"
+                                cls="bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </IconBtn>
+                              <IconBtn
+                                onClick={(e) => { e.stopPropagation(); deletePurchase(purchase.id); }}
+                                title="Delete"
+                                cls="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
                               </IconBtn>
                             </div>
                           </td>
@@ -559,7 +790,7 @@ const Transactions: React.FC<TransactionsProps> = ({
                 );
               })()}
 
-              {/* ══════════════════ OTHER TRANSACTIONS ══════════════════ */}
+              {/* OTHER TRANSACTIONS */}
               {typeFilter !== TransactionType.SALE && typeFilter !== TransactionType.PURCHASE && (
                 <table className="w-full text-sm border-collapse">
                   <thead>
@@ -581,7 +812,7 @@ const Transactions: React.FC<TransactionsProps> = ({
                           <td className="px-5 py-3 font-semibold text-slate-800">{tx.invoiceNo || `#${tx.id.slice(-6).toUpperCase()}`}</td>
                           <td className="px-5 py-3 text-xs text-slate-500">{tx.date}</td>
                           <td className="px-5 py-3">
-                            <p className="font-semibold text-slate-800">{account?.name || "N/A"}</p>
+                            <p className="font-semibold text-slate-800">{account?.name || 'N/A'}</p>
                             <p className="text-[10px] text-slate-400 font-mono">{account?.gstin}</p>
                           </td>
                           <td className="px-5 py-3 text-right font-bold text-slate-900">₹{tx.amount.toLocaleString()}</td>
@@ -604,19 +835,16 @@ const Transactions: React.FC<TransactionsProps> = ({
         </div>
       </div>
 
-      {/* Scanner Modal */}
       {showScanner && (
         <ScannerModal
           onClose={() => setShowScanner(false)}
           type={typeFilter as TransactionType.SALE | TransactionType.PURCHASE}
           onFound={(id) => {
-            if (typeFilter === TransactionType.SALE) navigate(`/sales/${id}`);
+            if (typeFilter === TransactionType.SALE)     navigate(`/sales/${id}`);
             if (typeFilter === TransactionType.PURCHASE) navigate(`/purchase-invoice/${id}`);
           }}
           onUploaded={() => {
-            fetchUploadedInvoices().then(() => {
-              setActiveTab('uploaded-invoices');
-            });
+            fetchUploadedInvoices().then(() => setActiveTab('uploaded-invoices'));
           }}
         />
       )}
@@ -624,86 +852,96 @@ const Transactions: React.FC<TransactionsProps> = ({
   );
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Scanner Modal — with Camera + Upload
+// ─────────────────────────────────────────────────────────────────────────────
 const ScannerModal: React.FC<{
   onClose: () => void;
   type: TransactionType.SALE | TransactionType.PURCHASE;
   onFound: (id: string) => void;
   onUploaded: () => void;
 }> = ({ onClose, type, onFound, onUploaded }) => {
-  const [mode, setMode] = useState<'choose' | 'camera' | 'upload'>('choose');
-  const [status, setStatus] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle');
-  const [errorMsg, setErrorMsg] = useState('');
+  const [mode, setMode]               = useState<'choose' | 'camera' | 'upload'>('choose');
+  const [status, setStatus]           = useState<'idle' | 'scanning' | 'success' | 'error'>('idle');
+  const [errorMsg, setErrorMsg]       = useState('');
   const [scannedData, setScannedData] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const readerRef = useRef<BrowserMultiFormatReader | null>(null);
+  const [loading, setLoading]         = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
 
-  const fetchByInvoice = async (invoiceNumber: string) => {
-    setLoading(true);
-    setStatus('scanning');
-    try {
-      const endpoint = type === TransactionType.SALE ? 'sales' : 'purchases';
-      const res = await fetch(`${API}/api/${endpoint}/barcode/${invoiceNumber.trim()}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+  const fileInputRef  = useRef<HTMLInputElement>(null);
+  const videoRef      = useRef<HTMLVideoElement>(null);
+  const canvasRef     = useRef<HTMLCanvasElement>(null);
+  const streamRef     = useRef<MediaStream | null>(null);
+
+  useEffect(() => {
+    if (mode !== 'camera') return;
+    setCameraReady(false);
+
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      .then((stream) => {
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play();
+          setCameraReady(true);
+        }
+      })
+      .catch(() => {
+        setErrorMsg('Camera access denied. Please allow camera permission.');
+        setStatus('error');
+        setMode('choose');
       });
 
-      if (!res.ok) throw new Error(`Invoice not found: ${invoiceNumber.trim()}`);
-      const data = await res.json();
-      setScannedData(data);
-      setStatus('success');
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to scan invoice');
-      setStatus('error');
-    } finally {
-      setLoading(false);
-    }
-  };
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    };
+  }, [mode]);
+
+  const capturePhoto = useCallback(() => {
+    const video  = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d')?.drawImage(video, 0, 0);
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      setMode('choose');
+      const file = new File([blob], 'capture.jpg', { type: 'image/jpeg' });
+      handleImageUpload(file);
+    }, 'image/jpeg', 0.92);
+  }, []);
 
   const handleImageUpload = async (file: File) => {
     setLoading(true);
     setStatus('scanning');
     try {
-      console.log('Starting image upload:', file.name, file.type, file.size);
-      
       const formData = new FormData();
       formData.append('image', file);
-
       const endpoint = type === TransactionType.SALE ? 'sales/scan-image' : 'purchases/scan-image';
-      const url = `${API}/api/${endpoint}`;
-      console.log('Upload URL:', url);
-      
-      const token = localStorage.getItem('token');
-      console.log('Token exists:', !!token);
-
-      const res = await fetch(url, {
+      const res = await fetch(`${API}/api/${endpoint}`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
         body: formData,
       });
-
-      console.log('Response status:', res.status);
-      console.log('Response ok:', res.ok);
-
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        console.error('Error response:', errorData);
-        throw new Error(errorData.error || 'Failed to process image');
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to process image');
       }
-
       const data = await res.json();
-      console.log('Upload success:', data);
-      
       if (!data.success) throw new Error('Failed to upload image');
-
       setScannedData({
-        id: type === TransactionType.SALE ? data.salesId : data.purchaseId,
+        id:         type === TransactionType.SALE ? data.salesId : data.purchaseId,
         invoice_no: data.invoiceNo,
-        imageUrl: data.imageUrl,
+        imageUrl:   data.imageUrl,
       });
       setStatus('success');
     } catch (err: any) {
-      console.error('Upload error:', err);
       setErrorMsg(err.message || 'Upload failed');
       setStatus('error');
     } finally {
@@ -712,138 +950,120 @@ const ScannerModal: React.FC<{
   };
 
   const reset = () => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
     setStatus('idle');
     setScannedData(null);
     setErrorMsg('');
     setMode('choose');
+    setCameraReady(false);
   };
 
-  useEffect(() => {
-    if (mode !== 'camera') return;
-
-    // Temporarily disable camera functionality until ZXing is properly configured
-    setErrorMsg('Camera scanning temporarily disabled. Please use image upload.');
-    setStatus('error');
-    setMode('choose');
-    
-    // Original camera code (commented out for now)
-    /*
-    try {
-      const reader = new BrowserMultiFormatReader();
-      readerRef.current = reader;
-
-      reader.listVideoInputDevices().then(devices => {
-        if (devices.length > 0 && videoRef.current) {
-          reader.decodeFromVideoDevice(devices[0].deviceId, videoRef.current, result => {
-            if (result) {
-              reader.reset();
-              setMode('choose');
-              fetchByInvoice(result.getText());
-            }
-          });
-        }
-      }).catch(() => {
-        setErrorMsg('Camera access failed');
-        setStatus('error');
-        setMode('choose');
-      });
-    } catch (error) {
-      setErrorMsg('Camera scanner not available');
-      setStatus('error');
-      setMode('choose');
-    }
-    */
-
-    return () => {
-      // if (readerRef.current) readerRef.current.reset();
-    };
-  }, [mode]);
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(2,8,23,0.85)', backdropFilter: 'blur(8px)' }}>
-      <div className="w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl" style={{ background: '#0f172a', border: '1px solid rgba(99,102,241,0.3)' }}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(2,8,23,0.85)', backdropFilter: 'blur(8px)' }}
+    >
+      <div
+        className="w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl"
+        style={{ background: '#0f172a', border: '1px solid rgba(99,102,241,0.3)' }}
+      >
         <div className="h-1" style={{ background: 'linear-gradient(90deg,#6366f1,#06b6d4)' }} />
+
         <div className="flex justify-between items-center px-7 py-5">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(99,102,241,0.2)' }}>
               <ScanLine className="w-5 h-5 text-indigo-400" />
             </div>
             <div>
-              <h2 className="text-white font-bold text-lg leading-none">Scan {type === TransactionType.SALE ? 'Sales' : 'Purchase'} Bill</h2>
-              <p className="text-slate-500 text-xs mt-0.5">Scan barcode or upload invoice image</p>
+              <h2 className="text-white font-bold text-lg leading-none">
+                Scan {type === TransactionType.SALE ? 'Sales' : 'Purchase'} Bill
+              </h2>
+              <p className="text-slate-500 text-xs mt-0.5">Use camera or upload an invoice image</p>
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center text-slate-500 hover:text-white hover:bg-slate-700 transition">
+          <button
+            onClick={() => { reset(); onClose(); }}
+            className="w-8 h-8 rounded-full flex items-center justify-center text-slate-500 hover:text-white hover:bg-slate-700 transition"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         <div className="px-7 pb-7 space-y-4">
+
           {mode === 'choose' && status !== 'success' && status !== 'error' && !loading && (
-            <div className="space-y-4">
-              {/* Temporarily showing only image upload option */}
-              <div className="p-6 rounded-2xl border" style={{ background: 'rgba(16,185,129,0.06)', borderColor: 'rgba(16,185,129,0.2)' }}>
-                <div className="flex flex-col items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'rgba(16,185,129,0.15)' }}>
-                    <Upload className="w-7 h-7 text-emerald-400" />
-                  </div>
-                  <p className="text-white font-semibold text-sm">Upload Invoice Image</p>
-                  <p className="text-slate-400 text-xs">Upload invoice image to create invoice</p>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setMode('camera')}
+                className="flex flex-col items-center gap-3 p-5 rounded-2xl border transition hover:border-indigo-500"
+                style={{ background: 'rgba(99,102,241,0.06)', borderColor: 'rgba(99,102,241,0.2)' }}
+              >
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'rgba(99,102,241,0.15)' }}>
+                  <Camera className="w-7 h-7 text-indigo-400" />
                 </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleImageUpload(file);
-                  }}
-                  className="hidden"
-                />
-                <button onClick={() => fileInputRef.current?.click()} className="w-full mt-4 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold transition">
-                  Choose Image File
-                </button>
-              </div>
-              
-              <div className="text-center">
-                <p className="text-slate-500 text-xs">Camera scanning temporarily disabled</p>
-              </div>
+                <div className="text-center">
+                  <p className="text-white font-semibold text-sm">Use Camera</p>
+                  <p className="text-slate-400 text-xs mt-0.5">Take a photo</p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex flex-col items-center gap-3 p-5 rounded-2xl border transition hover:border-emerald-500"
+                style={{ background: 'rgba(16,185,129,0.06)', borderColor: 'rgba(16,185,129,0.2)' }}
+              >
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'rgba(16,185,129,0.15)' }}>
+                  <Upload className="w-7 h-7 text-emerald-400" />
+                </div>
+                <div className="text-center">
+                  <p className="text-white font-semibold text-sm">Upload Image</p>
+                  <p className="text-slate-400 text-xs mt-0.5">Choose from files</p>
+                </div>
+              </button>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageUpload(f); }}
+              />
             </div>
           )}
 
           {mode === 'camera' && (
-            <div className="space-y-4">
-              <div className="relative rounded-2xl overflow-hidden bg-black" style={{ border: '2px solid rgba(99,102,241,0.4)' }}>
-                <video ref={videoRef} className="w-full h-56 object-cover" />
-                <div className="absolute inset-0 pointer-events-none">
-                  <div className="absolute left-8 right-8 h-0.5 bg-indigo-400" style={{ animation: 'scanline 2s ease-in-out infinite', top: '50%', boxShadow: '0 0 8px #6366f1' }} />
-                </div>
+            <div className="space-y-3">
+              <div
+                className="relative rounded-2xl overflow-hidden bg-black"
+                style={{ border: '2px solid rgba(99,102,241,0.4)' }}
+              >
+                <video ref={videoRef} className="w-full h-64 object-cover" autoPlay playsInline muted />
+                <canvas ref={canvasRef} className="hidden" />
+                {cameraReady && (
+                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                    <div className="w-48 h-48 border-2 border-indigo-400 rounded-xl opacity-60">
+                      <div className="absolute top-0 left-0 w-5 h-5 border-t-4 border-l-4 border-indigo-400 rounded-tl-xl" />
+                      <div className="absolute top-0 right-0 w-5 h-5 border-t-4 border-r-4 border-indigo-400 rounded-tr-xl" />
+                      <div className="absolute bottom-0 left-0 w-5 h-5 border-b-4 border-l-4 border-indigo-400 rounded-bl-xl" />
+                      <div className="absolute bottom-0 right-0 w-5 h-5 border-b-4 border-r-4 border-indigo-400 rounded-br-xl" />
+                    </div>
+                  </div>
+                )}
+                {!cameraReady && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+                    <div className="w-6 h-6 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                  </div>
+                )}
               </div>
-              <button onClick={reset} className="w-full py-2.5 rounded-xl text-slate-400 border border-slate-700 text-sm">
-                Back
+              <button
+                onClick={capturePhoto}
+                disabled={!cameraReady}
+                className="w-full py-3 rounded-xl font-semibold text-white transition disabled:opacity-40"
+                style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}
+              >
+                📸 Capture Photo
               </button>
-              <style>{`@keyframes scanline{0%,100%{top:20%}50%{top:80%}}`}</style>
-            </div>
-          )}
-
-          {mode === 'upload' && (
-            <div className="space-y-4">
-              <div className="p-5 rounded-2xl" style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.2)' }}>
-                <p className="text-slate-400 text-sm mb-3">Upload invoice image to scan:</p>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleImageUpload(file);
-                  }}
-                  className="hidden"
-                />
-                <button onClick={() => fileInputRef.current?.click()} className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold transition">
-                  Choose Image File
-                </button>
-              </div>
               <button onClick={reset} className="w-full py-2.5 rounded-xl text-slate-400 border border-slate-700 hover:border-slate-500 transition text-sm">
                 Back
               </button>
@@ -853,7 +1073,7 @@ const ScannerModal: React.FC<{
           {loading && (
             <div className="text-center py-8">
               <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-              <p className="text-slate-400 text-sm">Scanning...</p>
+              <p className="text-slate-400 text-sm">Processing image...</p>
             </div>
           )}
 
@@ -862,35 +1082,35 @@ const ScannerModal: React.FC<{
               <CheckCircle className="w-12 h-12 text-emerald-400 mx-auto mb-4" />
               <p className="text-white font-semibold mb-2">{scannedData.imageUrl ? 'Image Uploaded!' : 'Invoice Found!'}</p>
               <p className="text-slate-400 text-sm mb-2">{scannedData.invoice_no}</p>
-
               {scannedData.imageUrl && (
                 <div className="mb-4">
-                  <img src={scannedData.imageUrl} alt="Uploaded invoice" className="w-32 h-32 object-cover rounded-lg mx-auto border-2 border-emerald-500" />
-                  <p className="text-slate-400 text-xs mt-2">Invoice image uploaded</p>
+                  <img
+                    src={scannedData.imageUrl}
+                    alt="Uploaded invoice"
+                    className="w-32 h-32 object-cover rounded-lg mx-auto border-2 border-emerald-500"
+                  />
+                  <p className="text-slate-400 text-xs mt-2">Invoice image uploaded successfully</p>
                 </div>
               )}
-
               <div className="space-y-2">
                 <button
                   onClick={() => {
-                    // Navigate to the invoice edit page to complete details
+                    if (scannedData.imageUrl) { onUploaded(); onClose(); return; }
                     onFound(scannedData.id);
                     onClose();
                   }}
                   className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold transition"
                 >
-                  Complete Invoice Details
+                  {scannedData.imageUrl ? "View Uploaded Images" : "Complete Invoice Details"}
                 </button>
-                <button
-                  onClick={() => {
-                    // Refresh uploaded invoices and switch to uploaded tab
-                    onUploaded();
-                    onClose();
-                  }}
-                  className="w-full py-2.5 rounded-xl text-slate-400 border border-slate-700 hover:border-slate-500 transition text-sm"
-                >
-                  View Uploaded Images
-                </button>
+                {scannedData.imageUrl && (
+                  <button
+                    onClick={() => window.open(scannedData.imageUrl, "_blank", "noopener,noreferrer")}
+                    className="w-full py-2.5 rounded-xl text-slate-400 border border-slate-700 hover:border-slate-500 transition text-sm"
+                  >
+                    Open Image
+                  </button>
+                )}
                 <button onClick={reset} className="w-full py-2.5 rounded-xl text-slate-400 border border-slate-700 hover:border-slate-500 transition text-sm">
                   Scan Another
                 </button>
@@ -908,6 +1128,7 @@ const ScannerModal: React.FC<{
               </button>
             </div>
           )}
+
         </div>
       </div>
     </div>
@@ -915,5 +1136,3 @@ const ScannerModal: React.FC<{
 };
 
 export default Transactions;
-
-

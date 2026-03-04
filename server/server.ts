@@ -11,9 +11,7 @@ import stockHistoryRouter from "./routes/stockHistory";
 import salesRoutes from "./routes/sales";          // ✅ NEW
 import dashboardRoutes from "./routes/dashboard";   // ✅ NEW
 import imageScanRoutes from "./routes/image-scan";   // ✅ NEW
-
 import path from "path/win32";
-
 const app = express();
 
 // app.use(cors());

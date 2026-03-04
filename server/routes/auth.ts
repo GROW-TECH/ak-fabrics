@@ -30,8 +30,7 @@ router.post("/login", async (req, res) => {
         shop_id: shop.id,
         shop_name: shop.name
       },
-      JWT_SECRET,
-      { expiresIn: "8h" }
+      JWT_SECRET
     );
 
     res.json({
@@ -74,8 +73,7 @@ router.post("/register", async (req, res) => {
         shop_id: id,
         shop_name: name || email
       },
-      JWT_SECRET,
-      { expiresIn: "8h" }
+      JWT_SECRET
     );
 
     res.json({

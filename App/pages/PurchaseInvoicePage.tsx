@@ -14,9 +14,14 @@ const computeTax = (taxable: number, pin: string, gstRate: number, shopPin: stri
   const isInter =
     pin.length >= 2 && shopPin.length >= 2 && pin.slice(0, 2) !== shopPin.slice(0, 2);
   const rate = Number.isFinite(Number(gstRate)) ? Number(gstRate) : DEFAULT_GST_RATE;
-  let cgst = 0, sgst = 0, igst = 0;
+  let cgst = 0;
+  let sgst = 0;
+  let igst = 0;
   if (isInter) igst = round2((taxable * rate) / 100);
-  else { cgst = round2((taxable * rate) / 200); sgst = round2((taxable * rate) / 200); }
+  else {
+    cgst = round2((taxable * rate) / 200);
+    sgst = round2((taxable * rate) / 200);
+  }
   const tax = round2(cgst + sgst + igst);
   const roundOff = round2(Math.round(taxable + tax) - (taxable + tax));
   return { cgst, sgst, igst, roundOff, totalAfterTax: round2(taxable + tax + roundOff), gstRate: rate };
@@ -28,37 +33,47 @@ const WhatsAppIcon = () => (
   </svg>
 );
 
-const SalesInvoicePage: React.FC = () => {
+const PurchaseInvoicePage: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const { shopName } = useAuth();
-  const [sale, setSale] = useState<any>(null);
+  const [purchase, setPurchase] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [f, setF] = useState({
-    customer_name: "", customer_address: "", customer_address2: "",
-    customer_gstin: "", customer_state_code: "", customer_pincode: "",
-    invoice_no: "", invoice_date: "", bale_no: "", through_agent: "", lr_no: "", notes: "",
+    vendor_name: "",
+    vendor_address: "",
+    vendor_address2: "",
+    vendor_gstin: "",
+    vendor_state_code: "",
+    vendor_pincode: "",
+    invoice_no: "",
+    invoice_date: "",
+    bale_no: "",
+    through_agent: "",
+    lr_no: "",
+    notes: "",
   });
   const upd = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setF(p => ({ ...p, [k]: e.target.value }));
+    setF((p) => ({ ...p, [k]: e.target.value }));
 
-  const fetchSale = async () => {
+  const fetchPurchase = async () => {
     if (!id) return;
-    const res = await fetch(`${API}/api/sales/${id}`, {
+    const res = await fetch(`${API}/api/purchases/${id}`, {
       headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
     });
     if (res.ok) {
       const d = await res.json();
-      setSale(d);
+      setPurchase(d);
+      const gstin = String(d.vendor_gstin || "").trim();
       setF({
-        customer_name: d.customer_name || "",
-        customer_address: d.customer_address || "",
-        customer_address2: d.customer_address2 || "",
-        customer_gstin: d.customer_gstin || "",
-        customer_state_code: d.customer_state_code || "",
-        customer_pincode: String(d.customer_pincode || "").trim(),
+        vendor_name: d.vendor_name || "",
+        vendor_address: d.vendor_address || "",
+        vendor_address2: "",
+        vendor_gstin: gstin,
+        vendor_state_code: gstin.length >= 2 ? gstin.slice(0, 2) : "",
+        vendor_pincode: "",
         invoice_no: d.invoice_no || "",
         invoice_date: new Date(d.created_at || Date.now()).toLocaleDateString("en-IN"),
         bale_no: d.bale_no || "",
@@ -69,145 +84,179 @@ const SalesInvoicePage: React.FC = () => {
     }
   };
 
-  useEffect(() => { fetchSale(); }, [id]);
+  useEffect(() => { fetchPurchase(); }, [id]);
 
   const taxable = useMemo(
-    () => (sale?.items || []).reduce((s: number, i: any) => s + Number(i.total || 0), 0),
-    [sale]
+    () => (purchase?.items || []).reduce((s: number, i: any) => s + Number(i.total || 0), 0),
+    [purchase]
   );
+
   const tax = useMemo(() => {
-    const rate = Number(sale?.gst_rate || DEFAULT_GST_RATE);
-    const shop = String(sale?.shop_pincode || DEFAULT_SHOP_PINCODE).trim();
-    return computeTax(taxable, f.customer_pincode, rate, shop);
-  }, [sale, f.customer_pincode, taxable]);
+    const rate = Number(purchase?.gst_rate || DEFAULT_GST_RATE);
+    const shop = String(purchase?.shop_pincode || DEFAULT_SHOP_PINCODE).trim();
+    return computeTax(taxable, f.vendor_pincode, rate, shop);
+  }, [purchase, f.vendor_pincode, taxable]);
 
-  // ─── Resolve WhatsApp number from URL param or sale data ─────────────────
-  const resolveWaPhone = () => {
-    const urlParams = new URLSearchParams(location.search);
-    const urlPhone = urlParams.get("phone") || "";
-    const dataPhone = sale?.customer_phone
-      ? String(sale.customer_phone).replace(/\D/g, "")
-      : "";
-    const rawPhone = (urlPhone || dataPhone).replace(/\D/g, "");
-    if (rawPhone.length === 10) return "91" + rawPhone;
-    if (rawPhone.length >= 11 && rawPhone.startsWith("91")) return rawPhone;
-    return rawPhone;
-  };
+ const shareAsImage = async () => {
+  setSharing(true);
+  try {
+    const invoiceEl = document.querySelector(".ps") as HTMLElement;
+    if (!invoiceEl) { alert("Invoice not found"); setSharing(false); return; }
 
-  // ─── Capture invoice as image → download → open wa.me directly ───────────
-  const shareAsImage = async () => {
-    setSharing(true);
-    try {
-      const invoiceEl = document.querySelector(".ps") as HTMLElement;
-      if (!invoiceEl) { alert("Invoice not found"); setSharing(false); return; }
+    const canvas = await html2canvas(invoiceEl, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: "#fff",
+      logging: false,
+    });
 
-      const canvas = await html2canvas(invoiceEl, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: "#fff",
-        logging: false,
-      });
+    canvas.toBlob(async (blob) => {
+      if (!blob) { alert("Failed to capture invoice"); setSharing(false); return; }
 
-      canvas.toBlob(async (blob) => {
-        if (!blob) { alert("Failed to capture invoice"); setSharing(false); return; }
+      // Resolve phone
+      const urlParams = new URLSearchParams(location.search);
+      const urlPhone = urlParams.get("phone") || "";
+      const dataPhone = purchase?.vendor_phone
+        ? String(purchase.vendor_phone).replace(/\D/g, "")
+        : "";
+      const rawPhone = urlPhone || dataPhone;
+      const cleaned = rawPhone.replace(/\D/g, "");
+      const waPhone = cleaned.length === 10
+        ? "91" + cleaned
+        : cleaned.length >= 11 && cleaned.startsWith("91")
+        ? cleaned
+        : cleaned;
 
-        const waPhone = resolveWaPhone();
-        console.log("Sharing to waPhone:", waPhone);
+      console.log("Final waPhone:", waPhone);
 
-        // ── Mobile: Web Share API attaches the image directly ────────────
-        if (navigator.share && navigator.canShare) {
-          const file = new File([blob], `${f.invoice_no || "invoice"}.png`, { type: "image/png" });
-          if (navigator.canShare({ files: [file] })) {
-            try {
-              await navigator.share({ title: `Invoice ${f.invoice_no}`, files: [file] });
-              setSharing(false);
-              return;
-            } catch (_) {
-              // user cancelled or unsupported — fall through
-            }
-          }
+      // Mobile: Web Share API
+      if (navigator.share && navigator.canShare) {
+        const file = new File([blob], `${f.invoice_no || "invoice"}.png`, { type: "image/png" });
+        if (navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({ title: `Invoice ${f.invoice_no}`, files: [file] });
+            setSharing(false);
+            return;
+          } catch (_) {}
         }
+      }
 
-        // ── Desktop: download PNG, then open wa.me directly to customer ──
-        const imgUrl = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = imgUrl;
-        a.download = `${f.invoice_no || "invoice"}.png`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(imgUrl);
+      // Download image
+      const imgUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = imgUrl;
+      a.download = `${f.invoice_no || "invoice"}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(imgUrl);
 
-        const msg = encodeURIComponent(
-          `Dear ${f.customer_name || "Customer"},\nSales Invoice *${f.invoice_no}* from *AK Fabrics*\nAmount: ₹${money(tax.totalAfterTax)}\n\n_Please find the attached invoice image._`
-        );
+      const msg = encodeURIComponent(
+        `Dear ${f.vendor_name || "Vendor"},\nPurchase Invoice *${f.invoice_no}* from *${shopName || "AK Fabrics"}*\nAmount: ₹${money(tax.totalAfterTax)}\n\n_Please find the attached invoice image._`
+      );
 
-        // wa.me opens directly to that contact's chat (mobile app or WhatsApp Web)
-        setTimeout(() => {
-          if (waPhone.length >= 10) {
-            window.open(`https://wa.me/${waPhone}?text=${msg}`, "_blank");
-          } else {
-            window.open(`https://wa.me/?text=${msg}`, "_blank");
-          }
-        }, 600);
+      setTimeout(() => {
+        if (waPhone.length >= 10) {
+          // ✅ WhatsApp Web direct chat — goes straight to that number
+          window.open(`https://web.whatsapp.com/send?phone=${waPhone}&text=${msg}`, "_blank");
+        } else {
+          window.open(`https://web.whatsapp.com/send?text=${msg}`, "_blank");
+        }
+      }, 800);
 
-        setSharing(false);
-      }, "image/png");
-
-    } catch (err) {
-      console.error(err);
-      alert("Failed to share invoice");
       setSharing(false);
-    }
-  };
+    }, "image/png");
+
+  } catch (err) {
+    console.error(err);
+    alert("Failed to share invoice");
+    setSharing(false);
+  }
+};
 
   // Auto-trigger share if navigated with ?share=true
   useEffect(() => {
-    if (!sale) return;
+    if (!purchase) return;
     const params = new URLSearchParams(location.search);
     if (params.get("share") === "true") {
       setTimeout(() => shareAsImage(), 800);
     }
-  }, [sale]);
+  }, [purchase]);
 
   const saveAll = async () => {
-    if (!id) return;
+    if (!id || !purchase) return;
     setSaving(true);
     try {
-      const res = await fetch(`${API}/api/sales/${id}/tax-details`, {
+      const res = await fetch(`${API}/api/purchases/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
-        body: JSON.stringify({ customerPincode: f.customer_pincode, gstRate: Number(sale?.gst_rate || DEFAULT_GST_RATE), ...f }),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify({
+          vendor_id: purchase.vendor_id,
+          payment_mode: purchase.payment_mode || "CREDIT",
+          paid_amount: Number(purchase.paid_amount || 0),
+          through_agent: f.through_agent || null,
+          notes: f.notes || null,
+          items: (purchase.items || []).map((item: any) => ({
+            productId: item.product_id || item.productId || "",
+            hsn: item.hsn || "",
+            size: item.size || "",
+            description: item.description || "",
+            rate: Number(item.rate || 0),
+            qty: Number(item.quantity ?? item.qty ?? 0),
+            discount: Number(item.discount || 0),
+            total: Number(item.total || 0),
+          })),
+        }),
       });
-      if (!res.ok) { const e = await res.json().catch(() => ({})); return alert(e.error || "Failed"); }
-      const data = await res.json();
-      setSale(data.sale);
-    } finally { setSaving(false); }
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        return alert(e.error || "Failed");
+      }
+      await fetchPurchase();
+    } finally {
+      setSaving(false);
+    }
   };
 
-  if (!sale) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="w-8 h-8 border-2 border-green-700 border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
+  if (!purchase) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-8 h-8 border-2 border-green-700 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
-  const paid = Number(sale.paid_amount || 0);
+  const paid = Number(purchase.paid_amount || 0);
   const balance = Math.max(0, tax.totalAfterTax - paid);
-  const items: any[] = sale.items || [];
+  const items: any[] = purchase.items || [];
   const G = "#2e7d32";
   const DG = "#1b5e20";
 
   const inp = (w?: string | number): React.CSSProperties => ({
-    border: "none", borderBottom: "1px dashed #aaa", outline: "none",
-    background: "transparent", fontFamily: "inherit", fontSize: 12,
-    padding: "1px 3px", width: w || "100%", display: "block",
+    border: "none",
+    borderBottom: "1px dashed #aaa",
+    outline: "none",
+    background: "transparent",
+    fontFamily: "inherit",
+    fontSize: 12,
+    padding: "1px 3px",
+    width: w || "100%",
+    display: "block",
   });
 
   const boxInp = (w?: string | number): React.CSSProperties => ({
-    border: `1px solid ${G}`, outline: "none", background: "transparent",
-    fontFamily: "inherit", fontSize: 11, padding: "2px 5px",
-    width: w || "auto", borderRadius: 2,
+    border: `1px solid ${G}`,
+    outline: "none",
+    background: "transparent",
+    fontFamily: "inherit",
+    fontSize: 11,
+    padding: "2px 5px",
+    width: w || "auto",
+    borderRadius: 2,
   });
 
   return (
@@ -234,25 +283,40 @@ const SalesInvoicePage: React.FC = () => {
 
       {/* ACTION BAR */}
       <div className="no-print flex items-center justify-between mb-4">
-        <button onClick={() => navigate(-1)}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 text-sm">
+        <button
+          onClick={() => navigate(-1)}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 text-sm"
+        >
           <ArrowLeft className="w-4 h-4" /> Back
         </button>
         <div className="flex gap-2">
-          <button onClick={saveAll} disabled={saving}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-60 text-sm">
-            <Save className="w-4 h-4" />{saving ? "Saving..." : "Save"}
+          <button
+            onClick={saveAll}
+            disabled={saving}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-60 text-sm"
+          >
+            <Save className="w-4 h-4" />
+            {saving ? "Saving..." : "Save"}
           </button>
-          <button onClick={shareAsImage} disabled={sharing}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded border border-green-300 bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-60 text-sm">
+
+          {/* WhatsApp Share */}
+          <button
+            onClick={shareAsImage}
+            disabled={sharing}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded border border-green-300 bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-60 text-sm"
+          >
             {sharing
               ? <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
               : <WhatsAppIcon />}
             {sharing ? "Capturing..." : "WhatsApp"}
           </button>
-          <button onClick={() => window.print()}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded border border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-sm">
-            <Printer className="w-4 h-4" /> Print
+
+          <button
+            onClick={() => window.print()}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded border border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-sm"
+          >
+            <Printer className="w-4 h-4" />
+            Print
           </button>
         </div>
       </div>
@@ -263,9 +327,11 @@ const SalesInvoicePage: React.FC = () => {
 
           {/* ── HEADER ── */}
           <div style={{ borderBottom: `2px solid ${G}` }}>
+
+            {/* TOP ROW: GSTIN left | deity text center | phone right */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 10px", borderBottom: `1px solid ${G}` }}>
               <div style={{ fontSize: 10.5 }}>
-                <div><b>GSTIN : </b>{sale.shop_gstin || "33AKGPK9627B1ZC"}</div>
+                <div><b>GSTIN : </b>{purchase.shop_gstin || "33AKGPK9627B1ZC"}</div>
                 <div><b>STATE CODE : </b>33</div>
               </div>
               <div style={{ fontSize: 10, color: "#555", fontStyle: "italic", textAlign: "center" }}>
@@ -283,28 +349,42 @@ const SalesInvoicePage: React.FC = () => {
               </div>
             </div>
 
+            {/* MAIN LOGO ROW */}
             <div style={{ display: "flex", alignItems: "center" }}>
               <div style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "8px", width: 140 }}>
-                <img src="/AK Logo.jpg" alt="AK Fabrics"
+                <img
+                  src="/AK Logo.jpg"
+                  alt="AK Fabrics"
                   style={{ width: 100, height: 100, objectFit: "contain", display: "block" }}
-                  onError={e => (e.target as HTMLImageElement).style.display = "none"} />
+                  onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
+                />
               </div>
               <div style={{ flex: 1, padding: "6px 10px", textAlign: "center" }}>
-                <div style={{ fontSize: 34, fontWeight: 900, color: DG, lineHeight: 1, letterSpacing: 2, fontFamily: "Georgia,serif" }}>{shopName || "AK FABRICS"}</div>
+                <div style={{ fontSize: 34, fontWeight: 900, color: DG, lineHeight: 1, letterSpacing: 2, fontFamily: "Georgia,serif" }}>
+                  {shopName || "AK FABRICS"}
+                </div>
                 <div style={{ fontSize: 13, fontWeight: "bold", color: G, marginTop: 3 }}>CLOTH MERCHANT</div>
-                <div style={{ fontSize: 11, fontWeight: "bold", color: DG, marginTop: 3 }}>34, No-1 PandariNadhar Street, Ammapet, Salem - 636003</div>
+                <div style={{ fontSize: 11, fontWeight: "bold", color: DG, marginTop: 3 }}>
+                  34, No-1 PandariNadhar Street, Ammapet, Salem - 636003
+                </div>
                 <div style={{ fontSize: 10, color: "#444" }}>E-Mail : ak.fabries.salem@gmail.com</div>
               </div>
               <div style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "8px", width: 140 }}>
-                <img src="/Goddess.jpg" alt="Goddess"
+                <img
+                  src="/Goddess.jpg"
+                  alt="Goddess"
                   style={{ width: 100, height: 100, objectFit: "contain", display: "block" }}
-                  onError={e => (e.target as HTMLImageElement).style.display = "none"} />
+                  onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
+                />
               </div>
             </div>
 
+            {/* PURCHASE INVOICE label */}
             <div style={{ borderTop: `1px solid ${G}`, padding: "2px 10px", textAlign: "center", fontSize: 12, fontWeight: "bold", textDecoration: "underline", color: DG }}>
-              TAX INVOICE
+              PURCHASE INVOICE
             </div>
+
+            {/* Prop line */}
             <div style={{ borderTop: `1px solid ${G}`, padding: "3px 10px", fontSize: 11 }}>
               <b>Prop : K.KANNAN</b>
             </div>
@@ -316,21 +396,22 @@ const SalesInvoicePage: React.FC = () => {
               <div style={{ fontWeight: "bold", marginBottom: 5 }}>To.</div>
               <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 5 }}>
                 <span style={{ fontWeight: "bold", whiteSpace: "nowrap" }}>M/s.</span>
-                <input value={f.customer_name} onChange={upd("customer_name")} placeholder="Customer name" style={inp()} />
+                <input value={f.vendor_name} onChange={upd("vendor_name")} placeholder="Vendor name" style={inp()} />
               </div>
-              <input value={f.customer_address} onChange={upd("customer_address")} placeholder="Address line 1" style={{ ...inp(), marginBottom: 5 }} />
-              <input value={f.customer_address2} onChange={upd("customer_address2")} placeholder="City / District" style={{ ...inp(), marginBottom: 8 }} />
+              <input value={f.vendor_address} onChange={upd("vendor_address")} placeholder="Address line 1" style={{ ...inp(), marginBottom: 5 }} />
+              <input value={f.vendor_address2} onChange={upd("vendor_address2")} placeholder="City / District" style={{ ...inp(), marginBottom: 8 }} />
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                 <span style={{ fontWeight: "bold", whiteSpace: "nowrap" }}>GSTIN</span>
-                <input value={f.customer_gstin} onChange={upd("customer_gstin")} placeholder="Customer GSTIN" style={boxInp(145)} />
+                <input value={f.vendor_gstin} onChange={upd("vendor_gstin")} placeholder="Vendor GSTIN" style={boxInp(145)} />
                 <span style={{ fontWeight: "bold", whiteSpace: "nowrap" }}>STATE CODE.</span>
-                <input value={f.customer_state_code} onChange={upd("customer_state_code")} placeholder="33" style={boxInp(36)} />
+                <input value={f.vendor_state_code} onChange={upd("vendor_state_code")} placeholder="33" style={boxInp(36)} />
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ fontWeight: "bold" }}>Pincode:</span>
-                <input value={f.customer_pincode} onChange={upd("customer_pincode")} placeholder="Enter pincode" style={boxInp(100)} />
+                <input value={f.vendor_pincode} onChange={upd("vendor_pincode")} placeholder="Enter pincode" style={boxInp(100)} />
               </div>
             </div>
+
             <div style={{ padding: "8px 12px" }}>
               {([
                 ["Invoice No", "invoice_no"],
@@ -355,9 +436,19 @@ const SalesInvoicePage: React.FC = () => {
                 <th style={{ width: 62 }}>HSN<br />CODE</th>
                 <th style={{ width: 52 }}>Size</th>
                 <th style={{ textAlign: "left", paddingLeft: 6 }}>Particulars</th>
-                <th style={{ width: 100 }}>Rate<div style={{ display: "flex", justifyContent: "space-between", fontWeight: "normal", fontSize: 10, paddingInline: 3 }}><span>Rs.</span><span>P.</span></div></th>
+                <th style={{ width: 100 }}>
+                  Rate
+                  <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "normal", fontSize: 10, paddingInline: 3 }}>
+                    <span>Rs.</span><span>P.</span>
+                  </div>
+                </th>
                 <th style={{ width: 46 }}>Qty.</th>
-                <th style={{ width: 100 }}>AMOUNT<div style={{ display: "flex", justifyContent: "space-between", fontWeight: "normal", fontSize: 10, paddingInline: 3 }}><span>Rs.</span><span>P.</span></div></th>
+                <th style={{ width: 100 }}>
+                  AMOUNT
+                  <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "normal", fontSize: 10, paddingInline: 3 }}>
+                    <span>Rs.</span><span>P.</span>
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -399,6 +490,7 @@ const SalesInvoicePage: React.FC = () => {
                 </ol>
               </div>
             </div>
+
             <div>
               {[
                 ["Total Amount Before Tax", money(taxable), false],
@@ -428,4 +520,4 @@ const SalesInvoicePage: React.FC = () => {
   );
 };
 
-export default SalesInvoicePage;
+export default PurchaseInvoicePage;
