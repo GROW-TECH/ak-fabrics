@@ -23,7 +23,7 @@ router.post("/login", async (req, res) => {
         const token = jsonwebtoken_1.default.sign({
             shop_id: shop.id,
             shop_name: shop.name
-        }, JWT_SECRET, { expiresIn: "8h" });
+        }, JWT_SECRET);
         res.json({
             token,
             shop: {
@@ -51,7 +51,7 @@ router.post("/register", async (req, res) => {
         const token = jsonwebtoken_1.default.sign({
             shop_id: id,
             shop_name: name || email
-        }, JWT_SECRET, { expiresIn: "8h" });
+        }, JWT_SECRET);
         res.json({
             token,
             shop: {

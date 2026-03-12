@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Plus, X, Search } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Account, Transaction, AccountType } from '../types';
 
 interface LedgerListProps {
@@ -17,6 +17,7 @@ const LedgerList: React.FC<LedgerListProps> = ({
   onAddAccount
 }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [isAdding, setIsAdding] = useState(false);
   const [search, setSearch] = useState('');
 const [editingAccount, setEditingAccount] = useState<Account | null>(null);
@@ -41,6 +42,20 @@ const [editingAccount, setEditingAccount] = useState<Account | null>(null);
         a.name.toLowerCase().includes(search.toLowerCase())
       );
   }, [accounts, filterType, search]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('add') === '1') {
+      setEditingAccount(null);
+      setIsAdding(true);
+    }
+  }, [location.search]);
+
+  const clearAddQuery = () => {
+    if (!location.search) return;
+    const basePath = filterType === AccountType.CUSTOMER ? '/customers' : '/vendors';
+    navigate(basePath, { replace: true });
+  };
 
 const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
@@ -83,6 +98,7 @@ const handleSubmit = async (e: React.FormEvent) => {
       });
     }
 
+    clearAddQuery();
     window.location.reload();
   } catch (err) {
     console.error("Save failed", err);
@@ -157,7 +173,7 @@ const handleDelete = async (id: string) => {
         />
 
         <button
-          onClick={() => setIsAdding(true)}
+          onClick={() => { setEditingAccount(null); setIsAdding(true); }}
           className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-xl"
         >
           <Plus className="w-4 h-4 mr-2" />
@@ -243,7 +259,7 @@ const handleDelete = async (id: string) => {
           </h2>
         </div>
         <button
-          onClick={() => { setIsAdding(false); setEditingAccount(null); }}
+          onClick={() => { setIsAdding(false); setEditingAccount(null); clearAddQuery(); }}
           className="w-9 h-9 rounded-full bg-slate-100 hover:bg-red-100 hover:text-red-500 flex items-center justify-center transition-colors text-slate-500"
         >
           <X className="w-4 h-4" />
@@ -342,7 +358,7 @@ const handleDelete = async (id: string) => {
           <div className="border-t border-slate-100 pt-4 flex justify-end gap-3">
             <button
               type="button"
-              onClick={() => { setIsAdding(false); setEditingAccount(null); }}
+              onClick={() => { setIsAdding(false); setEditingAccount(null); clearAddQuery(); }}
               className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition"
             >
               Cancel

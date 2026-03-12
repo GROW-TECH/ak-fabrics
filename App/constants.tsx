@@ -38,7 +38,7 @@ export const INITIAL_TRANSACTIONS: Transaction[] = [
     taxAmount: 750,
     gstRate: 5,
     description: 'Bulk Sale of Banarasi Silk',
-    invoiceNo: 'AK/24-25/001',
+    invoiceNo: 'KT-01/24-25/001',
     items: [{ productId: 'p-1', quantity: 30, rate: 500, total: 15000 }]
   }
 ];

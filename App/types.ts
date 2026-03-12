@@ -28,6 +28,7 @@ export interface Product {
   name: string;
   description?: string;
   price: number;
+  average_cost?: number; // backend provides POE-loaded average cost
   stock: number;
   images: string[];
   isActive: boolean;

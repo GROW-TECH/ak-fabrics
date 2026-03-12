@@ -170,6 +170,105 @@ router.get("/stats", async (req: AuthRequest, res) => {
 });
 
 // ── GET Monthly Sales/Purchase Trends ───────────────────────────────────
+const asDate = (value: any): string | null => {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+};
+
+const rangeToDates = (range?: string): { start?: string | null; end?: string | null } => {
+  const today = new Date();
+  const end = today.toISOString().slice(0, 10);
+
+  const cloneDaysAgo = (days: number) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() - days);
+    return d.toISOString().slice(0, 10);
+  };
+
+  switch (String(range || "").toLowerCase()) {
+    case "today":
+      return { start: end, end };
+    case "week":
+      // last 7 days including today
+      return { start: cloneDaysAgo(6), end };
+    case "month": {
+      const first = new Date(today.getFullYear(), today.getMonth(), 1)
+        .toISOString()
+        .slice(0, 10);
+      return { start: first, end };
+    }
+    default:
+      return { start: null, end: null };
+  }
+};
+
+router.get("/profit-loss", async (req: AuthRequest, res) => {
+  try {
+    const shopId = req.shop.shop_id;
+    const { range, start_date, end_date } = req.query as any;
+
+    const quickRange = rangeToDates(range);
+    const start = asDate(start_date) || quickRange.start;
+    const end = asDate(end_date) || quickRange.end;
+
+    const dateClauseSales = start && end ? "AND s.created_at BETWEEN ? AND ?" : "";
+    const dateParamsSales = start && end ? [start, `${end} 23:59:59`] : [];
+    const dateClausePurch = start && end ? "AND p.created_at BETWEEN ? AND ?" : "";
+    const dateParamsPurch = start && end ? [start, `${end} 23:59:59`] : [];
+
+    const [salesAgg]: any = await pool.query(
+      `SELECT COALESCE(SUM(s.total_amount),0)  AS total_sales,
+              COALESCE(SUM(s.cost_total),0)   AS total_cogs,
+              COALESCE(SUM(s.profit_amount),0) AS total_profit
+       FROM sales s
+       WHERE s.shop_id = ?
+       ${dateClauseSales}`,
+      [shopId, ...dateParamsSales]
+    );
+
+    const [purchaseAgg]: any = await pool.query(
+      `SELECT COALESCE(SUM(p.total_amount),0) AS total_purchase_cost,
+              COALESCE(SUM(p.poe),0)          AS total_poe
+       FROM purchases p
+       WHERE p.shop_id = ?
+       ${dateClausePurch}`,
+      [shopId, ...dateParamsPurch]
+    );
+
+    const totalSales = Number(salesAgg?.[0]?.total_sales || 0);
+    // purchase total already includes POE; keep POE broken out for the report
+    const totalPurchaseCost = Number(purchaseAgg?.[0]?.total_purchase_cost || 0);
+    const otherExpenses = Number(purchaseAgg?.[0]?.total_poe || 0);
+    const totalCogs = Number(salesAgg?.[0]?.total_cogs || 0);
+    const profitFromSales = Number(salesAgg?.[0]?.total_profit || 0);
+
+    // Gross Profit = Revenue - COGS
+    const grossProfit = totalSales - (totalCogs || totalPurchaseCost);
+
+    // Net Profit = Revenue - COGS - Other Expenses (POE)
+    const netProfit =
+      Number.isFinite(profitFromSales) && profitFromSales !== 0
+        ? profitFromSales - otherExpenses
+        : totalSales - (totalCogs || totalPurchaseCost) - otherExpenses;
+
+    const profitMargin = totalSales > 0 ? (netProfit / totalSales) * 100 : 0;
+
+    res.json({
+      total_sales: totalSales,
+      total_purchase_cost: totalPurchaseCost,
+      other_expenses: otherExpenses,
+      total_cogs: totalCogs,
+      gross_profit: grossProfit,
+      profit_margin: profitMargin,
+      net_profit: netProfit,
+    });
+  } catch (error: any) {
+    console.error("Profit & Loss fetch error:", error);
+    res.status(500).json({ error: "Failed to compute Profit & Loss", details: error.message });
+  }
+});
+
 router.get("/trends", async (req: AuthRequest, res) => {
   try {
     const shopId = req.shop.shop_id;

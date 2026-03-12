@@ -1,6 +1,13 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { Account, Product } from "../types";
-import { ChevronDown, FileText, Image as ImageIcon, Package, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, FileText, Image as ImageIcon, Package, Plus, Trash2, Building } from "lucide-react";
+
+interface Bank {
+  id: number;
+  bank_name: string;
+  ifsc_code: string;
+  account_number: string;
+}
 
 interface SalesFormProps {
   accounts: Account[];
@@ -18,6 +25,7 @@ interface SalesItem {
   qty: number;
   discount: number;
   total: number;
+  colorSplit: { color: string; qty: number }[];
 }
 
 const SalesForm: React.FC<SalesFormProps> = ({ accounts, products, onSubmit, initialData }) => {
@@ -49,6 +57,8 @@ const SalesForm: React.FC<SalesFormProps> = ({ accounts, products, onSubmit, ini
   const [notes, setNotes] = useState(initialData?.notes || "");
   const [customerPincode, setCustomerPincode] = useState(initialData?.customer_pincode || initialData?.pincode || "");
   const [gstRate, setGstRate] = useState(initialData?.gst_rate || 5);
+  const [banks, setBanks] = useState<Bank[]>([]);
+  const [selectedBank, setSelectedBank] = useState<Bank | null>(null);
 
   const [items, setItems] = useState<SalesItem[]>(
     initialData?.items?.map((item: any) => ({
@@ -60,10 +70,38 @@ const SalesForm: React.FC<SalesFormProps> = ({ accounts, products, onSubmit, ini
       qty: Number(item.quantity) || 1,
       discount: Number(item.discount) || 0,
       total: Number(item.total) || 0,
-    })) || [{ productId: "", hsn: "", size: "", description: "", rate: 0, qty: 1, discount: 0, total: 0 }]
+      colorSplit: item.color_split || [],
+    })) || [{ productId: "", hsn: "", size: "", description: "", rate: 0, qty: 1, discount: 0, total: 0, colorSplit: [] }]
   );
 
   const customer = accounts.find((a) => a.id === customerId);
+
+  // Fetch banks from API
+  useEffect(() => {
+    const fetchBanks = async () => {
+      try {
+        const API = import.meta.env.VITE_API_URL;
+        const response = await fetch(`${API}/api/banks`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'x-shop-id': 'shop1'
+          }
+        });
+        const data = await response.json();
+        setBanks(data);
+      } catch (error) {
+        console.error('Error fetching banks:', error);
+      }
+    };
+    fetchBanks();
+  }, []);
+
+  // Reset selected bank when payment mode changes
+  useEffect(() => {
+    if (paymentMode !== 'BANK') {
+      setSelectedBank(null);
+    }
+  }, [paymentMode]);
 
   const calcTotal = (rate: number, qty: number, discount: number) => {
     const sub = rate * qty;
@@ -76,8 +114,57 @@ const SalesForm: React.FC<SalesFormProps> = ({ accounts, products, onSubmit, ini
     updated[index].productId = productId;
     updated[index].hsn = product?.hsnCode || "";
     updated[index].description = product?.name || "";
-    updated[index].rate = product?.price || 0;
+    const baseRate = Number(product?.price || 0);
+    const avgCost = Number((product as any)?.average_cost || 0);
+    updated[index].rate = Math.max(baseRate, avgCost); // default to at least POE-loaded cost
+    const colorsRaw: any = (product as any)?.color_stock;
+    const parsedColors = Array.isArray(colorsRaw)
+      ? colorsRaw
+      : (() => { try { return JSON.parse(colorsRaw || "[]"); } catch { return []; } })();
+    const colorFallback = (product?.color || "").split(",").map((c) => c.trim()).filter(Boolean).map((c) => ({ color: c, qty: 0 }));
+    updated[index].colorSplit = (parsedColors.length ? parsedColors : colorFallback).map((c: any) => ({ color: c.color || c, qty: 0 }));
     updated[index].total = calcTotal(updated[index].rate, updated[index].qty, updated[index].discount);
+    setItems(updated);
+  };
+
+  const getColorName = (colorCode: string): string => {
+    // If it's already a name (not a hex code), return as is
+    if (!colorCode.startsWith('#')) return colorCode;
+    
+    // Common color mapping for hex codes
+    const colorMap: { [key: string]: string } = {
+      '#FF0000': 'Red',
+      '#00FF00': 'Green', 
+      '#0000FF': 'Blue',
+      '#FFFF00': 'Yellow',
+      '#FF00FF': 'Magenta',
+      '#00FFFF': 'Cyan',
+      '#FFA500': 'Orange',
+      '#800080': 'Purple',
+      '#FFC0CB': 'Pink',
+      '#A52A2A': 'Brown',
+      '#808080': 'Gray',
+      '#000000': 'Black',
+      '#FFFFFF': 'White',
+      '#3b82f6': 'Blue',
+      '#eaf73b': 'Yellow',
+      '#ef4444': 'Red',
+      '#10b981': 'Green',
+      '#f59e0b': 'Orange',
+      '#8b5cf6': 'Purple',
+      '#ec4899': 'Pink',
+      '#6b7280': 'Gray'
+    };
+    
+    return colorMap[colorCode.toUpperCase()] || colorCode;
+  };
+
+  const handleColorQtyChange = (itemIndex: number, colorIndex: number, qty: number) => {
+    const updated = [...items];
+    updated[itemIndex].colorSplit[colorIndex].qty = Math.max(0, qty);
+    // Update total quantity based on color quantities
+    updated[itemIndex].qty = updated[itemIndex].colorSplit.reduce((sum, c) => sum + c.qty, 0);
+    updated[itemIndex].total = calcTotal(updated[itemIndex].rate, updated[itemIndex].qty, updated[itemIndex].discount);
     setItems(updated);
   };
 
@@ -89,7 +176,7 @@ const SalesForm: React.FC<SalesFormProps> = ({ accounts, products, onSubmit, ini
   };
 
   const addItem = () =>
-    setItems([...items, { productId: "", hsn: "", size: "", description: "", rate: 0, qty: 1, discount: 0, total: 0 }]);
+    setItems([...items, { productId: "", hsn: "", size: "", description: "", rate: 0, qty: 1, discount: 0, total: 0, colorSplit: [] }]);
 
   const removeItem = (index: number) => {
     if (items.length === 1) return;
@@ -113,6 +200,7 @@ const SalesForm: React.FC<SalesFormProps> = ({ accounts, products, onSubmit, ini
   const handleSubmit = () => {
     if (!customerId) return alert("Please select a customer");
     if (items.some((i) => !i.productId)) return alert("Please select a product for all rows");
+    if (paymentMode === 'BANK' && !selectedBank) return alert("Please select a bank for bank transfer");
 
     onSubmit({
       customerId,
@@ -132,6 +220,9 @@ const SalesForm: React.FC<SalesFormProps> = ({ accounts, products, onSubmit, ini
       igstAmount,
       totalAfterTax,
       date: new Date().toISOString(),
+      bankId: selectedBank?.id,
+      bankName: selectedBank?.bank_name,
+      bankAccount: selectedBank?.account_number,
     });
   };
 
@@ -226,6 +317,52 @@ const SalesForm: React.FC<SalesFormProps> = ({ accounts, products, onSubmit, ini
               </div>
             </div>
           </div>
+
+          {/* Bank Selection - Show only when Bank Transfer is selected */}
+          {paymentMode === 'BANK' && (
+            <div className="mt-4 p-4 rounded-xl bg-blue-50 border border-blue-100">
+              <div className="flex items-center gap-2 mb-3">
+                <Building className="w-5 h-5 text-blue-600" />
+                <h3 className="text-sm font-semibold text-blue-800">Select Bank for Transfer</h3>
+              </div>
+              <div className="relative">
+                <select
+                  value={selectedBank?.id || ''}
+                  onChange={(e) => {
+                    const bank = banks.find(b => b.id === parseInt(e.target.value));
+                    setSelectedBank(bank || null);
+                  }}
+                  className={inp + " pr-8 appearance-none"}
+                >
+                  <option value="">Select Bank</option>
+                  {banks.map(bank => (
+                    <option key={bank.id} value={bank.id}>
+                      {bank.bank_name} - {bank.account_number}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              </div>
+              {selectedBank && (
+                <div className="mt-3 p-3 bg-white rounded-lg border border-blue-200">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <p className="text-blue-600 font-semibold">Bank Name</p>
+                      <p className="text-gray-700">{selectedBank.bank_name}</p>
+                    </div>
+                    <div>
+                      <p className="text-blue-600 font-semibold">Account Number</p>
+                      <p className="text-gray-700 font-mono">{selectedBank.account_number}</p>
+                    </div>
+                    <div>
+                      <p className="text-blue-600 font-semibold">IFSC Code</p>
+                      <p className="text-gray-700 font-mono">{selectedBank.ifsc_code}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {customer && (
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3 p-4 rounded-xl bg-indigo-50 border border-indigo-100">
@@ -326,70 +463,147 @@ const SalesForm: React.FC<SalesFormProps> = ({ accounts, products, onSubmit, ini
             <div
               key={index}
               className="grid gap-2 p-3 rounded-xl border border-slate-100 bg-white hover:border-indigo-200 hover:shadow-sm transition items-center"
-              style={{ gridTemplateColumns: "repeat(4, 1fr)" }}
+              style={{ gridTemplateColumns: "2.5fr 0.8fr 0.8fr 2fr 1fr 0.8fr 0.8fr 1fr 36px" }}
             >
-              <div className="col-span-4 grid grid-cols-2 md:grid-cols-9 gap-2 items-center" style={{ gridColumn: "1 / -1" }}>
-                <div className="col-span-2 md:col-span-3">
-                  <label className="md:hidden text-xs text-slate-400 mb-0.5 block">Product</label>
-                  <select value={item.productId} onChange={(e) => handleProductChange(index, e.target.value)} className={inp}>
-                    <option value="">Select Product</option>
-                    {products.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="col-span-1">
-                  <label className="md:hidden text-xs text-slate-400 mb-0.5 block">HSN</label>
-                  <input value={item.hsn} onChange={(e) => handleItemField(index, "hsn", e.target.value)} placeholder="HSN" className={inp} />
-                </div>
-
-                <div className="col-span-1">
-                  <label className="md:hidden text-xs text-slate-400 mb-0.5 block">Size</label>
-                  <input value={item.size} onChange={(e) => handleItemField(index, "size", e.target.value)} placeholder="Size" className={inp} />
-                </div>
-
-                <div className="col-span-2 md:col-span-2">
-                  <label className="md:hidden text-xs text-slate-400 mb-0.5 block">Description</label>
-                  <input value={item.description} onChange={(e) => handleItemField(index, "description", e.target.value)} placeholder="Description" className={inp} />
-                </div>
-
-                <div className="col-span-1">
-                  <label className="md:hidden text-xs text-slate-400 mb-0.5 block">Rate</label>
-                  <input type="number" min={0} value={item.rate} onChange={(e) => handleItemField(index, "rate", Number(e.target.value))} placeholder="0" className={inp} />
-                </div>
-
-                <div className="col-span-1">
-                  <label className="md:hidden text-xs text-slate-400 mb-0.5 block">Qty</label>
-                  <input type="number" min={1} value={item.qty} onChange={(e) => handleItemField(index, "qty", Number(e.target.value))} className={inp} />
-                </div>
-
-                <div className="col-span-1">
-                  <label className="md:hidden text-xs text-slate-400 mb-0.5 block">Disc %</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={item.discount}
-                    onChange={(e) => handleItemField(index, "discount", Number(e.target.value))}
-                    placeholder="0"
-                    className={inp}
-                  />
-                </div>
-
-                <div className="col-span-1 flex items-center gap-1">
-                  <input value={`Rs ${item.total.toFixed(2)}`} readOnly className="w-full border border-slate-100 bg-slate-50 px-3 py-2 rounded-lg text-sm font-bold text-indigo-700" />
-                  <button
-                    onClick={() => removeItem(index)}
-                    disabled={items.length === 1}
-                    className="p-2 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition disabled:opacity-20 shrink-0"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+              <div>
+                <label className="md:hidden text-xs text-slate-400 mb-0.5 block">Product</label>
+                <select value={item.productId} onChange={(e) => handleProductChange(index, e.target.value)} className={inp}>
+                  <option value="">Select Product</option>
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
               </div>
+
+              <div>
+                <label className="md:hidden text-xs text-slate-400 mb-0.5 block">HSN</label>
+                <input value={item.hsn} onChange={(e) => handleItemField(index, "hsn", e.target.value)} placeholder="HSN" className={inp} />
+              </div>
+
+              <div>
+                <label className="md:hidden text-xs text-slate-400 mb-0.5 block">Size</label>
+                <input value={item.size} onChange={(e) => handleItemField(index, "size", e.target.value)} placeholder="Size" className={inp} />
+              </div>
+
+              <div>
+                <label className="md:hidden text-xs text-slate-400 mb-0.5 block">Description</label>
+                <input value={item.description} onChange={(e) => handleItemField(index, "description", e.target.value)} placeholder="Description" className={inp} />
+              </div>
+
+              <div>
+                <label className="md:hidden text-xs text-slate-400 mb-0.5 block">Rate</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={item.rate}
+                  onChange={(e) => handleItemField(index, "rate", Number(e.target.value))}
+                  placeholder="0"
+                  className={`${inp} ${
+                    (products.find((p) => p.id === item.productId)?.average_cost || 0) > 0 &&
+                    Number(item.rate || 0) <
+                      Number(products.find((p) => p.id === item.productId)?.average_cost || 0)
+                      ? "border-red-300 focus:border-red-400 focus:ring-red-200"
+                      : ""
+                  }`}
+                />
+                {item.productId && (() => {
+                  const prod = products.find((p) => p.id === item.productId);
+                  const avg = Number((prod as any)?.average_cost || 0);
+                  const base = Number(prod?.price || 0);
+                  const poeShare = Math.max(0, avg - base);
+                  const belowCost = Number(item.rate || 0) < avg;
+                  return (
+                    <div className="mt-1 space-y-0.5">
+                      <p className={`text-[10px] ${belowCost ? "text-red-500 font-semibold" : "text-slate-400"}`}>
+                        Avg cost (incl. POE): ₹{avg.toLocaleString("en-IN")}
+                        {belowCost && " (rate below cost)"}
+                      </p>
+                      <p className="text-[10px] text-slate-400">
+                        POE per unit: ₹{poeShare.toLocaleString("en-IN")}
+                      </p>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div>
+                <label className="md:hidden text-xs text-slate-400 mb-0.5 block">Qty</label>
+                <input type="number" min={1} value={item.qty} readOnly className="w-full border border-slate-100 bg-slate-50 px-3 py-2 rounded-lg text-sm font-medium text-slate-700" />
+              </div>
+
+              <div>
+                <label className="md:hidden text-xs text-slate-400 mb-0.5 block">Disc %</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={item.discount}
+                  onChange={(e) => handleItemField(index, "discount", Number(e.target.value))}
+                  placeholder="0"
+                  className={inp}
+                />
+              </div>
+
+              <div>
+                <input value={`Rs ${item.total.toFixed(2)}`} readOnly className="w-full border border-slate-100 bg-slate-50 px-3 py-2 rounded-lg text-sm font-bold text-indigo-700" />
+              </div>
+
+              <div className="flex items-center justify-center">
+                <button
+                  onClick={() => removeItem(index)}
+                  disabled={items.length === 1}
+                  className="p-2 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition disabled:opacity-20"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+              
+              {/* Color Selection Section */}
+              {item.productId && item.colorSplit && item.colorSplit.length > 0 && (
+                <div className="col-span-9 mt-3 p-4 rounded-lg bg-indigo-50 border border-indigo-100">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Package className="w-4 h-4 text-indigo-600" />
+                    <h4 className="text-sm font-semibold text-indigo-800">Color-wise Quantity</h4>
+                    <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-medium">
+                      Total: {item.qty} pcs
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {item.colorSplit.map((colorItem, colorIndex) => (
+                      <div key={colorIndex} className="bg-white rounded-lg p-3 border border-indigo-100">
+                        <div className="flex items-center gap-2 mb-2">
+                          {colorItem.color.startsWith('#') ? (
+                            <>
+                              <div 
+                                className="w-4 h-4 rounded border border-slate-300" 
+                                style={{ backgroundColor: colorItem.color }}
+                              />
+                              <label className="text-xs font-medium text-slate-600 block">
+                                {getColorName(colorItem.color)}
+                              </label>
+                            </>
+                          ) : (
+                            <label className="text-xs font-medium text-slate-600 block">
+                              {colorItem.color}
+                            </label>
+                          )}
+                        </div>
+                        <input
+                          type="number"
+                          min={0}
+                          value={colorItem.qty}
+                          onChange={(e) => handleColorQtyChange(index, colorIndex, Number(e.target.value))}
+                          className="w-full border border-slate-200 bg-white px-2 py-1.5 rounded text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                          placeholder="0"
+                        />
+                        <p className="text-xs text-slate-400 mt-1">Qty</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>

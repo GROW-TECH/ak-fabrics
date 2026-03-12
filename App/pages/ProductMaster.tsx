@@ -45,6 +45,9 @@ const ProductMaster: React.FC<ProductMasterProps> = ({
     location: '',
       hsnCode: '' 
   });
+  const [colors, setColors] = useState<{ color: string; qty: number }[]>([]);
+  const [newColor, setNewColor] = useState("#3b82f6");
+  const [newColorQty, setNewColorQty] = useState<number>(0);
 
   // Filter sub-categories based on selected category
   const availableSubCategories = subCategories.filter(sub => sub.categoryId === formData.categoryId);
@@ -55,6 +58,13 @@ const ProductMaster: React.FC<ProductMasterProps> = ({
       setFormData(prev => ({ ...prev, subCategoryId: '' }));
     }
   }, [formData.categoryId, availableSubCategories]);
+
+  useEffect(() => {
+    if (colors.length) {
+      const sum = colors.reduce((s, c) => s + (Number(c.qty) || 0), 0);
+      if (sum > 0) setFormData((prev) => ({ ...prev, stock: sum }));
+    }
+  }, [colors]);
 
   const handleOpenModal = (product?: Product) => {
     if (product) {
@@ -74,6 +84,15 @@ const ProductMaster: React.FC<ProductMasterProps> = ({
         location: product.location || '',
         hsnCode: product.hsnCode || ''
       });
+      const parsed = (() => {
+        try { return JSON.parse((product as any).color_stock || "[]"); } catch { return []; }
+      })();
+      if (Array.isArray(parsed) && parsed.length) {
+        setColors(parsed.map((c: any) => ({ color: c.color, qty: Number(c.qty) || 0 })));
+      } else {
+        setColors((product.color || '').split(',').map(c => c.trim()).filter(Boolean).map(c => ({ color: c, qty: 0 })));
+      }
+      setNewColor("#3b82f6"); setNewColorQty(0);
     } else {
       setEditingProduct(null);
       setFormData({ 
@@ -88,8 +107,11 @@ const ProductMaster: React.FC<ProductMasterProps> = ({
         designNo: '',
         color: '',
         quality: '',
-        location: ''
+        location: '',
+        hsnCode: ''
       });
+      setColors([]);
+      setNewColor("#3b82f6"); setNewColorQty(0);
     }
     setIsModalOpen(true);
   };
@@ -145,7 +167,22 @@ const handleSubmit = (e: React.FormEvent) => {
   form.append("stock", String(formData.stock));
   form.append("isActive", String(formData.isActive));
   form.append("designNo", formData.designNo);
-  form.append("color", formData.color);
+  let adjustedColors = colors;
+  if (colors.length) {
+    const currentSum = colors.reduce((s, c) => s + (Number(c.qty) || 0), 0);
+    const targetStock = currentSum > 0 ? currentSum : Number(formData.stock) || 0;
+    if (currentSum === 0 && targetStock > 0) {
+      const base = Math.floor(targetStock / colors.length);
+      const rem = targetStock - base * colors.length;
+      adjustedColors = colors.map((c, idx) => ({ ...c, qty: base + (idx < rem ? 1 : 0) }));
+    }
+    const newSum = adjustedColors.reduce((s, c) => s + (Number(c.qty) || 0), 0);
+    form.set("stock", String(newSum));
+  }
+
+  const colorString = adjustedColors.length ? adjustedColors.map(c => c.color).join(", ") : formData.color;
+  form.append("color", colorString);
+  form.append("color_stock", JSON.stringify(adjustedColors));
   form.append("quality", formData.quality);
   form.append("location", formData.location);
   form.append("hsnCode", formData.hsnCode);
@@ -352,14 +389,53 @@ const handleSubmit = (e: React.FormEvent) => {
                     placeholder="e.g. D-101" 
                   />
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Color</label>
-                  <input 
-                    value={formData.color} 
-                    onChange={e => setFormData({...formData, color: e.target.value})} 
-                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none" 
-                    placeholder="e.g. Royal Blue" 
-                  />
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Colors</label>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <input
+                      type="color"
+                      value={newColor}
+                      onChange={e => setNewColor(e.target.value)}
+                      className="h-10 w-16 rounded-lg border border-slate-200 cursor-pointer"
+                    />
+                    <input
+                      type="number"
+                      value={newColorQty}
+                      onChange={e => setNewColorQty(parseFloat(e.target.value) || 0)}
+                      className="w-24 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                      placeholder="Qty"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!newColor) return;
+                        setColors((prev) => {
+                          const next = [...prev.filter(c => c.color !== newColor), { color: newColor, qty: newColorQty || 0 }];
+                          setFormData((p) => ({ ...p, color: next.map(c => c.color).join(", ") }));
+                          return next;
+                        });
+                      }}
+                      className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
+                    >
+                      Add Color
+                    </button>
+                  </div>
+                  {colors.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {colors.map((c) => (
+                        <span key={c.color} className="flex items-center gap-2 px-2.5 py-1.5 rounded-full border border-slate-200 text-xs font-semibold">
+                          <span className="w-4 h-4 rounded-full border" style={{ backgroundColor: c.color }} />
+                          {c.color} · {c.qty}
+                          <button type="button" onClick={() => {
+                            const next = colors.filter(x => x.color !== c.color);
+                            setColors(next);
+                            setFormData((prev) => ({ ...prev, color: next.map(n => n.color).join(", ") }));
+                          }} className="text-slate-400 hover:text-red-500">×</button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-[11px] text-slate-500">Pick multiple shades and qty per shade; total stock auto-sums.</p>
                 </div>
    
                 <div className="space-y-1">
@@ -532,6 +608,24 @@ className="p-2 bg-white/90 backdrop-blur-sm rounded-xl text-slate-600 hover:text
               <p className="text-xs text-slate-500 leading-relaxed flex-1 line-clamp-2">
                 {prod.description || 'No description provided.'}
               </p>
+
+              {(() => {
+                const list = (() => {
+                  try { return JSON.parse((prod as any).color_stock || "[]"); } catch { return []; }
+                })();
+                const fallback = (prod.color || "").split(",").map((c: string) => ({ color: c.trim(), qty: null }));
+                const items = list.length ? list : fallback;
+                return items.filter((c: any) => c.color).length ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {items.filter((c: any) => c.color).map((c: any) => (
+                      <span key={c.color} className="flex items-center gap-2 px-2.5 py-1.5 rounded-full border border-slate-200 text-[11px] font-semibold text-slate-600 bg-white shadow-sm">
+                        <span className="w-3.5 h-3.5 rounded-full border border-slate-200" style={{ backgroundColor: c.color }} />
+                        {c.color} · {c.qty != null ? c.qty : Math.round((prod.stock || 0) / Math.max(1, items.length))}
+                      </span>
+                    ))}
+                  </div>
+                ) : null;
+              })()}
               
           <div className="mt-4 grid grid-cols-2 gap-4">
 

@@ -96,7 +96,7 @@ router.post("/", async (req, res) => {
         const id = (0, uuid_1.v4)();
         const [countRows] = await conn.query(`SELECT COUNT(*) as total FROM sales WHERE shop_id = ?`, [req.shop.shop_id]);
         const nextNumber = countRows[0].total + 1;
-        const invoice_no = `SAL${nextNumber.toString().padStart(7, "0")}`;
+        const invoice_no = `KT-01${nextNumber.toString().padStart(7, "0")}`;
         const totalQty = items.reduce((sum, i) => sum + i.qty, 0);
         const status = deriveStatus(Number(grandTotal || 0), Number(paidAmount || 0));
         const [customerRows] = await conn.query(`SELECT gstin, pincode FROM accounts WHERE id = ? AND shop_id = ?`, [customerId, req.shop.shop_id]);

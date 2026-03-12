@@ -3,8 +3,15 @@ import { Account, Product } from "../types";
 import {
   Plus, Trash2, FileText, Package, ChevronDown,
   CreditCard, User, Save, ArrowLeft,
-  IndianRupee, Hash, Ruler, AlignLeft, ShoppingBag,
+  IndianRupee, Hash, Ruler, AlignLeft, ShoppingBag, Building,
 } from "lucide-react";
+
+interface Bank {
+  id: number;
+  bank_name: string;
+  ifsc_code: string;
+  account_number: string;
+}
 
 interface PurchaseFormProps {
   accounts: Account[];
@@ -74,6 +81,9 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   const [notes,       setNotes]       = useState(initialData?.notes         || "");
   const [vendorPincode, setVendorPincode] = useState(initialData?.vendor_pincode || "");
   const [gstRate, setGstRate] = useState(initialData?.gst_rate || 5);
+  const [poe, setPoe] = useState<number>(Number(initialData?.poe) || 0);
+  const [banks, setBanks] = useState<Bank[]>([]);
+  const [selectedBank, setSelectedBank] = useState<Bank | null>(null);
 
   const blankItem = (): PurchaseItem => ({
     productId: "", hsn: "", size: "", description: "",
@@ -103,8 +113,36 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     setPaidAmount(Number(initialData.paid_amount)  || 0);
     setThrough(initialData.through_agent || "");
     setNotes(initialData.notes           || "");
+    setPoe(Number(initialData.poe) || 0);
     setItems(initialData.items?.length ? mapItems(initialData.items) : [blankItem()]);
   }, [initialData]);
+
+  // Fetch banks from API
+  useEffect(() => {
+    const fetchBanks = async () => {
+      try {
+        const API = import.meta.env.VITE_API_URL;
+        const response = await fetch(`${API}/api/banks`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'x-shop-id': 'shop1'
+          }
+        });
+        const data = await response.json();
+        setBanks(data);
+      } catch (error) {
+        console.error('Error fetching banks:', error);
+      }
+    };
+    fetchBanks();
+  }, []);
+
+  // Reset selected bank when payment mode changes
+  useEffect(() => {
+    if (paymentMode !== 'BANK') {
+      setSelectedBank(null);
+    }
+  }, [paymentMode]);
 
   const vendor  = accounts.find((a) => a.id === vendorId);
   const vendors = accounts.filter((a) => (a as any).type === "VENDOR");
@@ -153,16 +191,18 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   const grandTotal    = items.reduce((s, i) => s + i.total, 0);
   const totalDiscount = items.reduce((s, i) => s + (i.rate * i.qty * i.discount) / 100, 0);
   const subtotal      = grandTotal + totalDiscount;
-  const balanceAmount = Math.max(0, grandTotal - paidAmount);
+  const totalWithPoe  = grandTotal + Number(poe || 0);
+  const balanceAmount = Math.max(0, totalWithPoe - paidAmount);
   const totalQty      = items.reduce((s, i) => s + Number(i.qty || 0), 0);
 
   // GST Calculation
   const gstCalc = calculateGST(grandTotal, gstRate, vendorPincode);
   const { taxableAmount, cgstAmount, sgstAmount, igstAmount, totalAfterTax } = gstCalc;
+  const payableTotal = totalAfterTax + Number(poe || 0);
 
   const deriveStatus = (): "NOT_PAID" | "HALF_PAID" | "PAID" => {
     if (paidAmount <= 0)          return "NOT_PAID";
-    if (paidAmount >= totalAfterTax) return "PAID";
+    if (paidAmount >= payableTotal) return "PAID";
     return "HALF_PAID";
   };
   const status = deriveStatus();
@@ -181,13 +221,15 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   // ── submit ───────────────────────────────────────────────────────────────
   const handleSubmit = () => {
     if (!vendorId) { alert("Please select a vendor"); return; }
+    if (paymentMode === 'BANK' && !selectedBank) { alert("Please select a bank for bank transfer"); return; }
     onSubmit({
       vendor_id:     vendorId,
       payment_mode:  paymentMode,
       paid_amount:   paidAmount,
       through_agent: through  || null,
       notes:         notes    || null,
-      total_amount:  grandTotal,
+      total_amount:  totalWithPoe,
+      poe:           Number(poe || 0),
       vendorPincode,
       gstRate,
       taxableAmount,
@@ -195,6 +237,9 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       sgstAmount,
       igstAmount,
       totalAfterTax,
+      bankId: selectedBank?.id,
+      bankName: selectedBank?.bank_name,
+      bankAccount: selectedBank?.account_number,
       items: items.map((it) => ({
         productId:   it.productId,
         hsn:         it.hsn,
@@ -295,6 +340,52 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Bank Selection - Show only when Bank Transfer is selected */}
+          {paymentMode === 'BANK' && (
+            <div className="mt-4 p-4 rounded-xl bg-blue-50 border border-blue-100">
+              <div className="flex items-center gap-2 mb-3">
+                <Building className="w-5 h-5 text-blue-600" />
+                <h3 className="text-sm font-semibold text-blue-800">Select Bank for Transfer</h3>
+              </div>
+              <div className="relative">
+                <select
+                  value={selectedBank?.id || ''}
+                  onChange={(e) => {
+                    const bank = banks.find(b => b.id === parseInt(e.target.value));
+                    setSelectedBank(bank || null);
+                  }}
+                  className={inputCls + " appearance-none pr-9"}
+                >
+                  <option value="">Select Bank</option>
+                  {banks.map(bank => (
+                    <option key={bank.id} value={bank.id}>
+                      {bank.bank_name} - {bank.account_number}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              </div>
+              {selectedBank && (
+                <div className="mt-3 p-3 bg-white rounded-lg border border-blue-200">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <p className="text-blue-600 font-semibold">Bank Name</p>
+                      <p className="text-gray-700">{selectedBank.bank_name}</p>
+                    </div>
+                    <div>
+                      <p className="text-blue-600 font-semibold">Account Number</p>
+                      <p className="text-gray-700 font-mono">{selectedBank.account_number}</p>
+                    </div>
+                    <div>
+                      <p className="text-blue-600 font-semibold">IFSC Code</p>
+                      <p className="text-gray-700 font-mono">{selectedBank.ifsc_code}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Vendor info card */}
           {vendor && (
@@ -651,6 +742,23 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
               </span>
             </div>
 
+            <div className="flex justify-between items-center text-sm text-slate-600">
+              <span className="flex items-center gap-1">Other Expense (POE)</span>
+              <input
+                type="number"
+                value={poe}
+                onChange={(e) => setPoe(Number(e.target.value) || 0)}
+                className="w-28 text-right border border-slate-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              />
+            </div>
+
+            <div className="flex justify-between items-center font-bold text-slate-800 border-t border-slate-100 pt-3">
+              <span className="text-sm">Total Cost (incl. POE)</span>
+              <span className="text-indigo-700 text-lg">
+                ₹{totalWithPoe.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+
             {/* GST Breakdown */}
             {(cgstAmount > 0 || sgstAmount > 0 || igstAmount > 0) && (
               <>
@@ -686,7 +794,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
             <div className="flex justify-between text-sm font-bold text-red-500 border-t border-slate-100 pt-3">
               <span>Balance Due</span>
-              <span>₹{(totalAfterTax - paidAmount).toFixed(2)}</span>
+              <span>₹{(payableTotal - paidAmount).toFixed(2)}</span>
             </div>
 
             <div className={`text-center py-2 rounded-xl text-xs font-bold border mt-1 ${statusCls[status]}`}>

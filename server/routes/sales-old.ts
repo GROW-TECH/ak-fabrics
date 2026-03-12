@@ -141,7 +141,7 @@ router.post("/", async (req: AuthRequest, res) => {
       [req.shop.shop_id]
     );
     const nextNumber = countRows[0].total + 1;
-    const invoice_no = `SAL${nextNumber.toString().padStart(7, "0")}`;
+    const invoice_no = `KT-01${nextNumber.toString().padStart(7, "0")}`;
 
     const totalQty = items.reduce((sum: number, i: any) => sum + i.qty, 0);
     const status = deriveStatus(Number(grandTotal || 0), Number(paidAmount || 0));

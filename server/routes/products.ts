@@ -43,23 +43,37 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
+// Ensure color_stock column exists
+const ensureColorStockColumn = async () => {
+  const [rows]: any = await pool.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'color_stock'`
+  );
+  if (!rows.length) {
+    await pool.query(`ALTER TABLE products ADD COLUMN color_stock LONGTEXT NULL`);
+  }
+};
+
 /* ===========================
    GET PRODUCTS
 =========================== */
 
 router.get("/", async (req: AuthRequest, res) => {
   try {
+    await ensureColorStockColumn();
     const [rows] = await pool.query(
-      `SELECT *
-       FROM products
-       WHERE shop_id = ?`,
+      `SELECT p.*, c.name as category_name
+       FROM products p
+       LEFT JOIN categories c ON p.categoryId = c.id
+       WHERE p.shop_id = ?`,
       [req.shop.shop_id]
     );
 
     const products = (rows as any[]).map(row => ({
       ...row,
       images: row.images ? JSON.parse(row.images) : [],
-      isActive: !!row.isActive
+      isActive: !!row.isActive,
+      color_stock: row.color_stock ? JSON.parse(row.color_stock) : null,
     }));
 
     res.json(products);
@@ -75,6 +89,7 @@ router.get("/", async (req: AuthRequest, res) => {
 
 router.post("/", upload.array("images"), async (req: AuthRequest, res) => {
   try {
+    await ensureColorStockColumn();
     const {
       id,
       categoryId,
@@ -88,18 +103,22 @@ router.post("/", upload.array("images"), async (req: AuthRequest, res) => {
       color,
       quality,
       location,
-      hsnCode
+      hsnCode,
+      color_stock
     } = req.body;
 
     const files = req.files as Express.Multer.File[];
     const imageNames = files ? files.map(f => f.filename) : [];
 
+    const colorStockObj = color_stock ? JSON.parse(color_stock) : null;
+    const stockValue = colorStockObj ? colorStockObj.reduce((s: number, c: any) => s + (Number(c.qty) || 0), 0) : Number(stock);
+
     await pool.query(
       `INSERT INTO products
        (id, shop_id, categoryId, subCategoryId, name, description,
         price, stock, images, isActive,
-        designNo, color, quality, location,hsnCode)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)`,
+        designNo, color, quality, location,hsnCode, color_stock)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         req.shop.shop_id,
@@ -108,14 +127,15 @@ router.post("/", upload.array("images"), async (req: AuthRequest, res) => {
         name,
         description || "",
         Number(price),
-        Number(stock),
+        stockValue,
         JSON.stringify(imageNames),
         isActive === "true" ? 1 : 0,
         designNo || "",
         color || "",
         quality || "",
         location || "",
-        hsnCode||""
+        hsnCode||"",
+        color_stock || null
       ]
     );
 
@@ -133,7 +153,8 @@ router.post("/", upload.array("images"), async (req: AuthRequest, res) => {
       color,
       quality,
       location,
-      hsnCode
+      hsnCode,
+      color_stock: colorStockObj
     });
 
   } catch (error: any) {
@@ -154,6 +175,7 @@ router.post("/", upload.array("images"), async (req: AuthRequest, res) => {
   await connection.beginTransaction();
 
   try {
+    await ensureColorStockColumn();
     const {
       id,
       categoryId,
@@ -167,10 +189,12 @@ router.post("/", upload.array("images"), async (req: AuthRequest, res) => {
       color,
       quality,
       location,
-      hsnCode
+      hsnCode,
+      color_stock
     } = req.body;
 
-    const qty = Number(stock) || 0;
+    const colorStockObj = color_stock ? JSON.parse(color_stock) : null;
+    const qty = colorStockObj ? colorStockObj.reduce((s: number, c: any) => s + (Number(c.qty) || 0), 0) : Number(stock) || 0;
 
     const files = req.files as Express.Multer.File[];
     const imageNames = files ? files.map(f => f.filename) : [];
@@ -180,8 +204,8 @@ router.post("/", upload.array("images"), async (req: AuthRequest, res) => {
       `INSERT INTO products
        (id, shop_id, categoryId, subCategoryId, name, description,
         price, stock, images, isActive,
-        designNo, color, quality, location,hsnCode)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)`,
+        designNo, color, quality, location,hsnCode, color_stock)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         req.shop.shop_id,
@@ -197,7 +221,8 @@ router.post("/", upload.array("images"), async (req: AuthRequest, res) => {
         color || "",
         quality || "",
         location || "",
-        hsnCode || " "
+        hsnCode || " ",
+        color_stock || null
       ]
     );
 
@@ -227,7 +252,8 @@ router.post("/", upload.array("images"), async (req: AuthRequest, res) => {
       color,
       quality,
       location,
-      hsnCode
+      hsnCode,
+      color_stock: colorStockObj
     });
 
   } catch (error: any) {

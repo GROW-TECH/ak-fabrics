@@ -1,11 +1,11 @@
-import express from "express";
+import express, { Router } from "express";
 import cors from "cors";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
-import pool from "./server/db";
-import categoryRoutes from "./server/routes/categories";
-import subCategoryRoutes from "./server/routes/subCategories";
-import productRoutes from "./server/routes/products";
+import pool from "../server/db";
+import categoryRoutes from "../server/routes/categories";
+import subCategoryRoutes from "../server/routes/subCategories";
+import productRoutes from "../server/routes/products";
 
 dotenv.config();
 
@@ -17,9 +17,9 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // API Routes
-app.use("/api/categories", categoryRoutes);
-app.use("/api/sub-categories", subCategoryRoutes);
-app.use("/api/products", productRoutes);
+app.use("/api/categories", categoryRoutes as any);
+app.use("/api/sub-categories", subCategoryRoutes as any);
+app.use("/api/products", productRoutes as any);
 
 // Initialize database tables
 async function initDb() {

@@ -81,7 +81,6 @@ const SalesInvoicePage: React.FC = () => {
     return computeTax(taxable, f.customer_pincode, rate, shop);
   }, [sale, f.customer_pincode, taxable]);
 
-  // ─── Resolve WhatsApp number from URL param or sale data ─────────────────
   const resolveWaPhone = () => {
     const urlParams = new URLSearchParams(location.search);
     const urlPhone = urlParams.get("phone") || "";
@@ -94,7 +93,6 @@ const SalesInvoicePage: React.FC = () => {
     return rawPhone;
   };
 
-  // ─── Capture invoice as image → download → open wa.me directly ───────────
   const shareAsImage = async () => {
     setSharing(true);
     try {
@@ -102,20 +100,15 @@ const SalesInvoicePage: React.FC = () => {
       if (!invoiceEl) { alert("Invoice not found"); setSharing(false); return; }
 
       const canvas = await html2canvas(invoiceEl, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: "#fff",
-        logging: false,
+        scale: 2, useCORS: true, allowTaint: true,
+        backgroundColor: "#fff", logging: false,
       });
 
       canvas.toBlob(async (blob) => {
         if (!blob) { alert("Failed to capture invoice"); setSharing(false); return; }
 
         const waPhone = resolveWaPhone();
-        console.log("Sharing to waPhone:", waPhone);
 
-        // ── Mobile: Web Share API attaches the image directly ────────────
         if (navigator.share && navigator.canShare) {
           const file = new File([blob], `${f.invoice_no || "invoice"}.png`, { type: "image/png" });
           if (navigator.canShare({ files: [file] })) {
@@ -123,13 +116,10 @@ const SalesInvoicePage: React.FC = () => {
               await navigator.share({ title: `Invoice ${f.invoice_no}`, files: [file] });
               setSharing(false);
               return;
-            } catch (_) {
-              // user cancelled or unsupported — fall through
-            }
+            } catch (_) {}
           }
         }
 
-        // ── Desktop: download PNG, then open wa.me directly to customer ──
         const imgUrl = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = imgUrl;
@@ -143,7 +133,6 @@ const SalesInvoicePage: React.FC = () => {
           `Dear ${f.customer_name || "Customer"},\nSales Invoice *${f.invoice_no}* from *AK Fabrics*\nAmount: ₹${money(tax.totalAfterTax)}\n\n_Please find the attached invoice image._`
         );
 
-        // wa.me opens directly to that contact's chat (mobile app or WhatsApp Web)
         setTimeout(() => {
           if (waPhone.length >= 10) {
             window.open(`https://wa.me/${waPhone}?text=${msg}`, "_blank");
@@ -162,7 +151,6 @@ const SalesInvoicePage: React.FC = () => {
     }
   };
 
-  // Auto-trigger share if navigated with ?share=true
   useEffect(() => {
     if (!sale) return;
     const params = new URLSearchParams(location.search);
@@ -198,6 +186,42 @@ const SalesInvoicePage: React.FC = () => {
   const G = "#2e7d32";
   const DG = "#1b5e20";
 
+  const paymentStatus = balance === 0 ? 'PAID' : paid > 0 ? 'HALF_PAID' : 'NOT_PAID';
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'PAID': return 'text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full text-xs font-bold border border-emerald-200';
+      case 'HALF_PAID': return 'text-red-700 bg-red-50 px-2 py-1 rounded-full text-xs font-bold border border-red-200';
+      default: return 'text-red-700 bg-red-50 px-2 py-1 rounded-full text-xs font-bold border border-red-200';
+    }
+  };
+
+  const numberToWords = (num: number): string => {
+    if (num === 0) return 'Zero';
+    const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
+    const teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+    const thousands = ['', 'Thousand', 'Lakh', 'Crore'];
+    const convertLessThanThousand = (n: number): string => {
+      if (n < 10) return ones[n];
+      if (n < 20) return teens[n - 10];
+      if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '');
+      return ones[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' ' + convertLessThanThousand(n % 100) : '');
+    };
+    let result = '';
+    let scale = 0;
+    while (num > 0) {
+      const chunk = num % 1000;
+      if (chunk > 0) {
+        const chunkWords = convertLessThanThousand(chunk);
+        result = chunkWords + (thousands[scale] ? ' ' + thousands[scale] : '') + (result ? ' ' + result : '');
+      }
+      num = Math.floor(num / 1000);
+      scale++;
+    }
+    return result + ' Rupees Only';
+  };
+
   const inp = (w?: string | number): React.CSSProperties => ({
     border: "none", borderBottom: "1px dashed #aaa", outline: "none",
     background: "transparent", fontFamily: "inherit", fontSize: 12,
@@ -216,6 +240,7 @@ const SalesInvoicePage: React.FC = () => {
         @import url('https://fonts.googleapis.com/css2?family=Tinos:ital,wght@0,400;0,700;1,400&display=swap');
         .inv { font-family:'Tinos',Georgia,serif; font-size:12px; color:#111; }
         .inv-wrap { border:2px solid #2e7d32; background:#fff; }
+        .inv-table-wrap { width: 100%; }
         .itbl { border-collapse:collapse; width:100%; }
         .itbl th,.itbl td { border:1px solid #2e7d32; padding:3px 5px; font-size:12px; }
         .itbl th { background:#e8f5e9; font-weight:bold; text-align:center; }
@@ -223,6 +248,34 @@ const SalesInvoicePage: React.FC = () => {
         .srow { display:flex; justify-content:space-between; border-bottom:1px solid #2e7d32; padding:4px 10px; font-size:12px; align-items:center; }
         .srow:last-child{border-bottom:none;}
         input::placeholder{color:#ccc;font-style:italic;}
+        @media (max-width: 768px){
+          .no-print { position: sticky; top: 0; z-index: 30; background: #fff; padding: 8px 0; border-bottom: 1px solid #e2e8f0; }
+          .no-print .action-buttons { flex-wrap: wrap; justify-content: flex-end; }
+          .inv { font-size: 11px; }
+          .inv-wrap { border-width: 1px; }
+          .inv-top-meta { flex-direction: column; align-items: flex-start !important; gap: 6px; padding: 6px 8px !important; }
+          .inv-top-meta > div { width: 100%; }
+          .inv-top-meta > div:nth-child(2) { text-align: left !important; }
+          .inv-top-meta > div:nth-child(3) { align-items: flex-start !important; }
+          .inv-brand-row { display: grid !important; grid-template-columns: 72px 1fr 72px; align-items: center; }
+          .inv-logo-block { width: 72px !important; padding: 4px !important; }
+          .inv-logo-block img { width: 60px !important; height: 60px !important; }
+          .inv-brand-center { padding: 4px 6px !important; }
+          .inv-brand-title { font-size: 18px !important; letter-spacing: 1px !important; }
+          .inv-brand-sub { font-size: 11px !important; }
+          .inv-brand-addr { font-size: 10px !important; }
+          .inv-bill-grid { grid-template-columns: 1fr !important; }
+          .inv-bill-left { border-right: none !important; border-bottom: 1px solid #2e7d32; }
+          .inv-gstin-row, .inv-pin-row { flex-wrap: wrap; }
+          .inv-gstin-row input, .inv-pin-row input { width: 100% !important; flex: 1 1 100%; }
+          .inv-right-row { align-items: flex-start !important; flex-direction: column; gap: 2px; }
+          .inv-right-row span { min-width: 0 !important; }
+          .inv-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+          .itbl { min-width: 640px; }
+          .inv-footer-grid { grid-template-columns: 1fr !important; }
+          .inv-footer-left { border-right: none !important; border-bottom: 1px solid #2e7d32; }
+          .srow { padding: 4px 8px; font-size: 11px; }
+        }
         @media print{
           body *{visibility:hidden!important;}
           .ps,.ps *{visibility:visible!important;}
@@ -233,12 +286,12 @@ const SalesInvoicePage: React.FC = () => {
       `}</style>
 
       {/* ACTION BAR */}
-      <div className="no-print flex items-center justify-between mb-4">
+      <div className="no-print flex flex-wrap items-center justify-between gap-2 mb-4">
         <button onClick={() => navigate(-1)}
           className="inline-flex items-center gap-2 px-4 py-2 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 text-sm">
           <ArrowLeft className="w-4 h-4" /> Back
         </button>
-        <div className="flex gap-2">
+        <div className="action-buttons flex gap-2">
           <button onClick={saveAll} disabled={saving}
             className="inline-flex items-center gap-2 px-4 py-2 rounded border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-60 text-sm">
             <Save className="w-4 h-4" />{saving ? "Saving..." : "Save"}
@@ -259,11 +312,33 @@ const SalesInvoicePage: React.FC = () => {
 
       {/* INVOICE */}
       <div className="ps">
-        <div className="inv-wrap inv">
+        {/* Watermark wrapper — position:relative so the watermark stays inside the invoice */}
+        <div className="inv-wrap inv" style={{ position: "relative", overflow: "hidden" }}>
+
+          {/* ── WATERMARK ── */}
+          <div style={{
+            position: "absolute",
+            top: "50%", left: "50%",
+            transform: "translate(-50%, -50%)",
+            width: 440, height: 440,
+            pointerEvents: "none",
+            zIndex: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <img
+              src="/AK Logo.jpg"
+              alt=""
+              style={{ width: "100%", height: "100%", objectFit: "contain", opacity: 0.07 }}
+              onError={e => (e.target as HTMLImageElement).style.display = "none"}
+            />
+          </div>
+
+          {/* All invoice content sits above the watermark via position:relative + z-index:1 */}
+          <div style={{ position: "relative", zIndex: 1 }}>
 
           {/* ── HEADER ── */}
           <div style={{ borderBottom: `2px solid ${G}` }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 10px", borderBottom: `1px solid ${G}` }}>
+            <div className="inv-top-meta" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 10px", borderBottom: `1px solid ${G}` }}>
               <div style={{ fontSize: 10.5 }}>
                 <div><b>GSTIN : </b>{sale.shop_gstin || "33AKGPK9627B1ZC"}</div>
                 <div><b>STATE CODE : </b>33</div>
@@ -283,19 +358,19 @@ const SalesInvoicePage: React.FC = () => {
               </div>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center" }}>
-              <div style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "8px", width: 140 }}>
+            <div className="inv-brand-row" style={{ display: "flex", alignItems: "center" }}>
+              <div className="inv-logo-block" style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "8px", width: 140 }}>
                 <img src="/AK Logo.jpg" alt="AK Fabrics"
                   style={{ width: 100, height: 100, objectFit: "contain", display: "block" }}
                   onError={e => (e.target as HTMLImageElement).style.display = "none"} />
               </div>
-              <div style={{ flex: 1, padding: "6px 10px", textAlign: "center" }}>
-                <div style={{ fontSize: 34, fontWeight: 900, color: DG, lineHeight: 1, letterSpacing: 2, fontFamily: "Georgia,serif" }}>{shopName || "AK FABRICS"}</div>
-                <div style={{ fontSize: 13, fontWeight: "bold", color: G, marginTop: 3 }}>CLOTH MERCHANT</div>
-                <div style={{ fontSize: 11, fontWeight: "bold", color: DG, marginTop: 3 }}>34, No-1 PandariNadhar Street, Ammapet, Salem - 636003</div>
+              <div className="inv-brand-center" style={{ flex: 1, padding: "6px 10px", textAlign: "center" }}>
+                <div className="inv-brand-title" style={{ fontSize: 34, fontWeight: 900, color: DG, lineHeight: 1, letterSpacing: 2, fontFamily: "Georgia,serif" }}>{shopName || "AK FABRICS"}</div>
+                <div className="inv-brand-sub" style={{ fontSize: 13, fontWeight: "bold", color: G, marginTop: 3 }}>CLOTH MERCHANT</div>
+                <div className="inv-brand-addr" style={{ fontSize: 11, fontWeight: "bold", color: DG, marginTop: 3 }}>34, No-1 PandariNadhar Street, Ammapet, Salem - 636003</div>
                 <div style={{ fontSize: 10, color: "#444" }}>E-Mail : ak.fabries.salem@gmail.com</div>
               </div>
-              <div style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "8px", width: 140 }}>
+              <div className="inv-logo-block" style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "8px", width: 140 }}>
                 <img src="/Goddess.jpg" alt="Goddess"
                   style={{ width: 100, height: 100, objectFit: "contain", display: "block" }}
                   onError={e => (e.target as HTMLImageElement).style.display = "none"} />
@@ -311,8 +386,8 @@ const SalesInvoicePage: React.FC = () => {
           </div>
 
           {/* ── BILLING + INVOICE ── */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderBottom: `1px solid ${G}` }}>
-            <div style={{ borderRight: `1px solid ${G}`, padding: "8px 12px" }}>
+          <div className="inv-bill-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderBottom: `1px solid ${G}` }}>
+            <div className="inv-bill-left" style={{ borderRight: `1px solid ${G}`, padding: "8px 12px" }}>
               <div style={{ fontWeight: "bold", marginBottom: 5 }}>To.</div>
               <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 5 }}>
                 <span style={{ fontWeight: "bold", whiteSpace: "nowrap" }}>M/s.</span>
@@ -320,13 +395,13 @@ const SalesInvoicePage: React.FC = () => {
               </div>
               <input value={f.customer_address} onChange={upd("customer_address")} placeholder="Address line 1" style={{ ...inp(), marginBottom: 5 }} />
               <input value={f.customer_address2} onChange={upd("customer_address2")} placeholder="City / District" style={{ ...inp(), marginBottom: 8 }} />
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+              <div className="inv-gstin-row" style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                 <span style={{ fontWeight: "bold", whiteSpace: "nowrap" }}>GSTIN</span>
                 <input value={f.customer_gstin} onChange={upd("customer_gstin")} placeholder="Customer GSTIN" style={boxInp(145)} />
                 <span style={{ fontWeight: "bold", whiteSpace: "nowrap" }}>STATE CODE.</span>
                 <input value={f.customer_state_code} onChange={upd("customer_state_code")} placeholder="33" style={boxInp(36)} />
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div className="inv-pin-row" style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ fontWeight: "bold" }}>Pincode:</span>
                 <input value={f.customer_pincode} onChange={upd("customer_pincode")} placeholder="Enter pincode" style={boxInp(100)} />
               </div>
@@ -339,15 +414,22 @@ const SalesInvoicePage: React.FC = () => {
                 ["Through", "through_agent"],
                 ["L.R. No", "lr_no"],
               ] as [string, string][]).map(([label, key]) => (
-                <div key={key} style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
+                <div key={key} className="inv-right-row" style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
                   <span style={{ fontWeight: "bold", minWidth: 90, fontSize: 12 }}>{label}</span>
                   <input value={(f as any)[key]} onChange={upd(key)} placeholder={label} style={inp()} />
                 </div>
               ))}
+              <div className="inv-right-row" style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontWeight: "bold", minWidth: 90, fontSize: 12 }}>Payment Status</span>
+                <span className={getStatusColor(paymentStatus)} style={{ fontSize: 11 }}>
+                  {paymentStatus.replace('_', ' ')}
+                </span>
+              </div>
             </div>
           </div>
 
           {/* ── ITEMS TABLE ── */}
+          <div className="inv-table-wrap">
           <table className="itbl">
             <thead>
               <tr>
@@ -374,10 +456,11 @@ const SalesInvoicePage: React.FC = () => {
               ))}
             </tbody>
           </table>
+          </div>
 
           {/* ── FOOTER ── */}
-          <div style={{ borderTop: `1px solid ${G}`, display: "grid", gridTemplateColumns: "1fr 1fr" }}>
-            <div style={{ borderRight: `1px solid ${G}`, padding: "8px 12px" }}>
+          <div className="inv-footer-grid" style={{ borderTop: `1px solid ${G}`, display: "grid", gridTemplateColumns: "1fr 1fr" }}>
+            <div className="inv-footer-left" style={{ borderRight: `1px solid ${G}`, padding: "8px 12px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 10, fontSize: 11 }}>
                 <span style={{ fontWeight: "bold", whiteSpace: "nowrap" }}>Rupees</span>
                 <input value={f.notes} onChange={upd("notes")} placeholder="Amount in words / notes" style={inp()} />
@@ -407,6 +490,7 @@ const SalesInvoicePage: React.FC = () => {
                 [`IGST ........ ${tax.gstRate.toFixed(1)} %`, money(tax.igst), false],
                 ["Round off", (tax.roundOff >= 0 ? "+" : "") + money(tax.roundOff), false],
                 ["Total Amount After Tax", money(tax.totalAfterTax), true],
+                ["Amount in Words", numberToWords(tax.totalAfterTax), false],
                 ["Already Paid", money(paid), false],
                 ["Balance", money(balance), true],
               ].map(([label, value, highlight]) => (
@@ -422,6 +506,7 @@ const SalesInvoicePage: React.FC = () => {
             </div>
           </div>
 
+          </div>{/* end z-index:1 content wrapper */}
         </div>
       </div>
     </div>

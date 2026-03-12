@@ -47,6 +47,46 @@ const PurchaseInvoicePage: React.FC = () => {
 
   const createdDate = new Date(purchase.created_at || Date.now());
   const statusText = (purchase.payment_status || "NOT_PAID").replace("_", " ");
+  
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'PAID': return 'text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full text-xs font-bold border border-emerald-200';
+      case 'HALF_PAID': return 'text-red-700 bg-red-50 px-2 py-1 rounded-full text-xs font-bold border border-red-200';
+      default: return 'text-red-700 bg-red-50 px-2 py-1 rounded-full text-xs font-bold border border-red-200';
+    }
+  };
+  
+  // Convert number to Indian words
+  const numberToWords = (num: number): string => {
+    if (num === 0) return 'Zero';
+    
+    const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
+    const teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+    const thousands = ['', 'Thousand', 'Lakh', 'Crore'];
+    
+    const convertLessThanThousand = (n: number): string => {
+      if (n < 10) return ones[n];
+      if (n < 20) return teens[n - 10];
+      if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '');
+      return ones[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' ' + convertLessThanThousand(n % 100) : '');
+    };
+    
+    let result = '';
+    let scale = 0;
+    
+    while (num > 0) {
+      const chunk = num % 1000;
+      if (chunk > 0) {
+        const chunkWords = convertLessThanThousand(chunk);
+        result = chunkWords + (thousands[scale] ? ' ' + thousands[scale] : '') + (result ? ' ' + result : '');
+      }
+      num = Math.floor(num / 1000);
+      scale++;
+    }
+    
+    return result + ' Rupees Only';
+  };
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -100,7 +140,7 @@ const PurchaseInvoicePage: React.FC = () => {
               <p><span className="font-semibold text-emerald-900">Invoice Date:</span> {createdDate.toLocaleDateString("en-IN")}</p>
               <p><span className="font-semibold text-emerald-900">Through:</span> {purchase.through_agent || "-"}</p>
               <p><span className="font-semibold text-emerald-900">Payment:</span> {purchase.payment_mode || "-"}</p>
-              <p><span className="font-semibold text-emerald-900">Status:</span> {statusText}</p>
+              <p><span className="font-semibold text-emerald-900">Status:</span> <span className={getStatusColor(purchase.payment_status || "NOT_PAID")}>{statusText}</span></p>
             </div>
           </div>
 
@@ -140,6 +180,10 @@ const PurchaseInvoicePage: React.FC = () => {
               <div className="flex justify-between border-b border-emerald-700 py-1">
                 <span>Total Amount</span>
                 <span className="font-semibold">{money(total)}</span>
+              </div>
+              <div className="flex justify-between border-b border-emerald-700 py-1">
+                <span>Amount in Words</span>
+                <span className="font-semibold">{numberToWords(total)}</span>
               </div>
               <div className="flex justify-between border-b border-emerald-700 py-1">
                 <span>Already Paid</span>

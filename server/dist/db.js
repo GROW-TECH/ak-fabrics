@@ -13,6 +13,12 @@ const pool = promise_1.default.createPool({
     database: process.env.DB_NAME || 'ak_fabrics',
     waitForConnections: true,
     connectionLimit: 10,
-    queueLimit: 0
+    queueLimit: 0,
+    timezone: '+05:30', // Set timezone to Indian Standard Time
+    dateStrings: true // Return dates as strings instead of Date objects
+});
+// Set timezone for all connections
+pool.on('connection', function (connection) {
+    connection.query('SET time_zone = "+05:30"');
 });
 exports.default = pool;

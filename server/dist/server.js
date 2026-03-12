@@ -16,7 +16,14 @@ const stockHistory_1 = __importDefault(require("./routes/stockHistory"));
 const sales_1 = __importDefault(require("./routes/sales")); // ✅ NEW
 const dashboard_1 = __importDefault(require("./routes/dashboard")); // ✅ NEW
 const image_scan_1 = __importDefault(require("./routes/image-scan")); // ✅ NEW
-const win32_1 = __importDefault(require("path/win32"));
+const transfers_1 = __importDefault(require("./routes/transfers"));
+const banks_1 = __importDefault(require("./routes/banks")); // ✅ NEW
+const bank_transactions_1 = __importDefault(require("./routes/bank-transactions")); // ✅ NEW
+const eway_bills_1 = __importDefault(require("./routes/eway-bills")); // ✅ NEW
+const setup_banks_1 = __importDefault(require("./routes/setup-banks")); // ✅ NEW
+const sales_returns_1 = __importDefault(require("./routes/sales-returns"));
+const stock_transfers_1 = __importDefault(require("./routes/stock-transfers")); // ✅ NEW
+const path_1 = __importDefault(require("path"));
 const app = (0, express_1.default)();
 // app.use(cors());
 app.use((0, cors_1.default)({
@@ -25,9 +32,9 @@ app.use((0, cors_1.default)({
 }));
 app.use(express_1.default.json({ limit: "10mb" }));
 app.use(express_1.default.urlencoded({ limit: "10mb", extended: true }));
-app.use("/uploads", express_1.default.static(win32_1.default.join(__dirname, "uploads")));
-app.use("/uploads/sales-invoices", express_1.default.static(win32_1.default.join(__dirname, "uploads/sales-invoices")));
-app.use("/uploads/purchase-invoices", express_1.default.static(win32_1.default.join(__dirname, "uploads/purchase-invoices")));
+app.use("/uploads", express_1.default.static(path_1.default.join(__dirname, "uploads")));
+app.use("/uploads/sales-invoices", express_1.default.static(path_1.default.join(__dirname, "uploads/sales-invoices")));
+app.use("/uploads/purchase-invoices", express_1.default.static(path_1.default.join(__dirname, "uploads/purchase-invoices")));
 app.use("/api/auth", auth_1.default);
 app.use("/api/categories", categories_1.default);
 app.use("/api/products", products_1.default);
@@ -39,6 +46,13 @@ app.use("/api/stock-history", stockHistory_1.default);
 app.use("/api/sales", sales_1.default); // ✅ NEW
 app.use("/api/dashboard", dashboard_1.default); // ✅ NEW
 app.use("/api", image_scan_1.default); // ✅ NEW (image scan routes)
+app.use("/api/transfers", transfers_1.default);
+app.use("/api/banks", banks_1.default); // ✅ NEW
+app.use("/api/bank-transactions", bank_transactions_1.default); // ✅ NEW
+app.use("/api/eway-bills", eway_bills_1.default); // ✅ NEW
+app.use("/api/setup", setup_banks_1.default); // ✅ NEW
+app.use("/api/sales-returns", sales_returns_1.default); // ✅ NEW
+app.use("/api/stock-transfers", stock_transfers_1.default); // ✅ NEW
 app.get("/", (req, res) => {
     res.send("AK Fabrics Backend Running 🚀");
 });

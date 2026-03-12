@@ -80,7 +80,7 @@ const VoucherEntry: React.FC<VoucherEntryProps> = ({ accounts, products, onAdd, 
       taxAmount: isInventoryVoucher ? taxAmount : 0,
       gstRate: isInventoryVoucher ? gstRate : undefined,
       description,
-      invoiceNo: type === TransactionType.SALE ? `AK/${new Date().getFullYear()}-${(new Date().getFullYear() + 1).toString().slice(-2)}/${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}` : undefined,
+      invoiceNo: type === TransactionType.SALE ? `KT-0${Math.floor(Math.random() * 99) + 1}` : undefined,
       items: items.length > 0 ? items : undefined
     };
 

@@ -42,9 +42,10 @@ const upload = (0, multer_1.default)({ storage });
 =========================== */
 router.get("/", async (req, res) => {
     try {
-        const [rows] = await db_1.default.query(`SELECT *
-       FROM products
-       WHERE shop_id = ?`, [req.shop.shop_id]);
+        const [rows] = await db_1.default.query(`SELECT p.*, c.name as category_name
+       FROM products p
+       LEFT JOIN categories c ON p.categoryId = c.id
+       WHERE p.shop_id = ?`, [req.shop.shop_id]);
         const products = rows.map(row => ({
             ...row,
             images: row.images ? JSON.parse(row.images) : [],
